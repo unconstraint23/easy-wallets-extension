@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>测试钱包扩展</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .result {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            white-space: pre-wrap;
+        }
+        .error {
+            background: #f8d7da;
+            border-color: #f5c6cb;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>钱包扩展测试页面</h1>
+        <p>这个页面用于测试钱包扩展的功能。请确保已安装并启用了钱包扩展。</p>
+        
+        <h2>测试功能</h2>
+        
+        <button onclick="testConnection()">测试连接</button>
+        <button onclick="testAccounts()">获取账户</button>
+        <button onclick="testChainId()">获取链ID</button>
+        <button onclick="testRequestAccounts()">请求账户访问</button>
+        <button onclick="testSignMessage()">签名消息</button>
+        <button onclick="testAddChain()">添加自定义网络</button>
+        
+        <div id="result" class="result" style="display: none;"></div>
+    </div>
+
+    <script>
+        function showResult(message, isError = false) {
+            const resultDiv = document.getElementById('result');
+            resultDiv.textContent = message;
+            resultDiv.className = isError ? 'result error' : 'result';
+            resultDiv.style.display = 'block';
+        }
+
+        async function testConnection() {
+            try {
+                if (typeof window.ethereum !== 'undefined') {
+                    showResult('✅ 钱包扩展已连接！\n' + 
+                              'isMetaMask: ' + window.ethereum.isMetaMask + '\n' +
+                              'isConnected: ' + window.ethereum.isConnected());
+                } else {
+                    showResult('❌ 未检测到钱包扩展，请确保已安装并启用扩展', true);
+                }
+            } catch (error) {
+                showResult('❌ 连接测试失败: ' + error.message, true);
+            }
+        }
+
+        async function testAccounts() {
+            try {
+                const accounts = await window.ethereum.request({
+                    method: 'eth_accounts'
+                });
+                showResult('✅ 账户列表:\n' + JSON.stringify(accounts, null, 2));
+            } catch (error) {
+                showResult('❌ 获取账户失败: ' + error.message, true);
+            }
+        }
+
+        async function testChainId() {
+            try {
+                const chainId = await window.ethereum.request({
+                    method: 'eth_chainId'
+                });
+                showResult('✅ 当前链ID: ' + chainId);
+            } catch (error) {
+                showResult('❌ 获取链ID失败: ' + error.message, true);
+            }
+        }
+
+        async function testRequestAccounts() {
+            try {
+                const accounts = await window.ethereum.request({
+                    method: 'eth_requestAccounts'
+                });
+                showResult('✅ 请求账户成功:\n' + JSON.stringify(accounts, null, 2));
+            } catch (error) {
+                showResult('❌ 请求账户失败: ' + error.message, true);
+            }
+        }
+
+        async function testSignMessage() {
+            try {
+                const message = 'Hello, Wallet Extension!';
+                const signature = await window.ethereum.request({
+                    method: 'personal_sign',
+                    params: [message, window.ethereum.selectedAddress]
+                });
+                showResult('✅ 消息签名成功:\n消息: ' + message + '\n签名: ' + signature);
+            } catch (error) {
+                showResult('❌ 消息签名失败: ' + error.message, true);
+            }
+        }
+
+        async function testAddChain() {
+            try {
+                const chainConfig = {
+                    chainId: '0x89',
+                    chainName: 'Polygon Mainnet',
+                    rpcUrls: ['https://polygon-rpc.com'],
+                    blockExplorerUrls: ['https://polygonscan.com'],
+                    nativeCurrency: {
+                        name: 'MATIC',
+                        symbol: 'MATIC',
+                        decimals: 18
+                    }
+                };
+
+                await window.ethereum.request({
+                    method: 'wallet_addEthereumChain',
+                    params: [chainConfig]
+                });
+                showResult('✅ 网络添加成功:\n' + JSON.stringify(chainConfig, null, 2));
+            } catch (error) {
+                showResult('❌ 添加网络失败: ' + error.message, true);
+            }
+        }
+
+        // 页面加载时自动测试连接
+        window.addEventListener('load', () => {
+            setTimeout(testConnection, 1000);
+        });
+    </script>
+</body>
+</html>
