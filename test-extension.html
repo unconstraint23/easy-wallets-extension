@@ -3,23 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>测试钱包扩展</title>
+    <title>MyWallet 扩展测试页面</title>
     <style>
         body {
             font-family: Arial, sans-serif;
-            max-width: 800px;
+            max-width: 1000px;
             margin: 0 auto;
             padding: 20px;
-            background-color: #f5f5f5;
+            background-color: #1a1a1a;
+            color: #ffffff;
         }
         .container {
-            background: white;
+            background-color: #2d2d2d;
             padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            border-radius: 10px;
+            margin-bottom: 20px;
         }
-        button {
-            background: #007bff;
+        .button {
+            background-color: #007bff;
             color: white;
             border: none;
             padding: 10px 20px;
@@ -27,112 +28,237 @@
             cursor: pointer;
             margin: 5px;
         }
-        button:hover {
-            background: #0056b3;
+        .button:hover {
+            background-color: #0056b3;
+        }
+        .button.secondary {
+            background-color: #6c757d;
+        }
+        .button.secondary:hover {
+            background-color: #545b62;
         }
         .result {
-            background: #f8f9fa;
-            border: 1px solid #dee2e6;
+            background-color: #1e1e1e;
             padding: 10px;
-            margin: 10px 0;
             border-radius: 5px;
+            margin-top: 10px;
+            border-left: 3px solid #007bff;
             white-space: pre-wrap;
+            font-family: monospace;
+            max-height: 200px;
+            overflow-y: auto;
         }
         .error {
-            background: #f8d7da;
-            border-color: #f5c6cb;
-            color: #721c24;
+            border-left-color: #dc3545;
+            background-color: #2d1b1b;
+        }
+        .success {
+            border-left-color: #28a745;
+            background-color: #1b2d1b;
+        }
+        h1, h2 {
+            color: #007bff;
+        }
+        .section {
+            margin-bottom: 30px;
+        }
+        .input-group {
+            margin: 10px 0;
+        }
+        .input-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #ccc;
+        }
+        .input-group input, .input-group textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #555;
+            border-radius: 4px;
+            background-color: #333;
+            color: white;
+            box-sizing: border-box;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        @media (max-width: 768px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 </head>
 <body>
+    <h1>MyWallet 扩展功能测试页面</h1>
+    
+    <div class="grid">
+        <div class="container">
+            <h2>🔗 钱包连接测试</h2>
+            <button class="button" onclick="testConnection()">测试连接</button>
+            <button class="button" onclick="requestAccounts()">请求账户</button>
+            <button class="button" onclick="getChainId()">获取链ID</button>
+            <div id="connectionResult" class="result" style="display: none;"></div>
+        </div>
+
+        <div class="container">
+            <h2>👤 账户操作</h2>
+            <button class="button" onclick="getAccounts()">获取账户列表</button>
+            <button class="button" onclick="getBalance()">获取余额</button>
+            <button class="button" onclick="signMessage()">签名消息</button>
+            <div id="accountResult" class="result" style="display: none;"></div>
+        </div>
+
+        <div class="container">
+            <h2>🌐 网络操作</h2>
+            <button class="button" onclick="addEthereumChain()">添加自定义网络</button>
+            <button class="button" onclick="switchChain()">切换网络</button>
+            <div id="networkResult" class="result" style="display: none;"></div>
+        </div>
+
+        <div class="container">
+            <h2>💰 转账测试</h2>
+            <button class="button" onclick="sendEthTransaction()">发送ETH</button>
+            <button class="button" onclick="sendTokenTransaction()">发送代币</button>
+            <div id="transactionResult" class="result" style="display: none;"></div>
+        </div>
+    </div>
+
     <div class="container">
-        <h1>钱包扩展测试页面</h1>
-        <p>这个页面用于测试钱包扩展的功能。请确保已安装并启用了钱包扩展。</p>
-        
-        <h2>测试功能</h2>
-        
-        <button onclick="testConnection()">测试连接</button>
-        <button onclick="testAccounts()">获取账户</button>
-        <button onclick="testChainId()">获取链ID</button>
-        <button onclick="testRequestAccounts()">请求账户访问</button>
-        <button onclick="testSignMessage()">签名消息</button>
-        <button onclick="testAddChain()">添加自定义网络</button>
-        
-        <div id="result" class="result" style="display: none;"></div>
+        <h2>🔑 助记词功能测试</h2>
+        <button class="button" onclick="generateMnemonic()">生成助记词</button>
+        <button class="button secondary" onclick="importMnemonic()">导入助记词</button>
+        <div class="input-group">
+            <label for="mnemonicInput">助记词:</label>
+            <textarea id="mnemonicInput" rows="3" placeholder="输入12或24个助记词，用空格分隔"></textarea>
+        </div>
+        <div class="input-group">
+            <label for="passphraseInput">密码短语 (可选):</label>
+            <input type="password" id="passphraseInput" placeholder="输入密码短语">
+        </div>
+        <div id="mnemonicResult" class="result" style="display: none;"></div>
+    </div>
+
+    <div class="container">
+        <h2>🪙 代币功能测试</h2>
+        <button class="button" onclick="watchToken()">添加代币</button>
+        <button class="button" onclick="getWatchedTokens()">获取已观察代币</button>
+        <button class="button" onclick="getTokenBalance()">获取代币余额</button>
+        <div class="input-group">
+            <label for="tokenAddressInput">代币地址:</label>
+            <input type="text" id="tokenAddressInput" placeholder="0x..." value="0xdAC17F958D2ee523a2206206994597C13D831ec7">
+        </div>
+        <div id="tokenResult" class="result" style="display: none;"></div>
+    </div>
+
+    <div class="container">
+        <h2>📊 系统信息</h2>
+        <button class="button" onclick="showSystemInfo()">显示系统信息</button>
+        <div id="systemResult" class="result" style="display: none;"></div>
     </div>
 
     <script>
-        function showResult(message, isError = false) {
-            const resultDiv = document.getElementById('result');
-            resultDiv.textContent = message;
-            resultDiv.className = isError ? 'result error' : 'result';
-            resultDiv.style.display = 'block';
+        function showResult(elementId, message, isError = false) {
+            const element = document.getElementById(elementId);
+            element.style.display = 'block';
+            element.textContent = message;
+            element.className = `result ${isError ? 'error' : 'success'}`;
         }
 
         async function testConnection() {
             try {
                 if (typeof window.ethereum !== 'undefined') {
-                    showResult('✅ 钱包扩展已连接！\n' + 
-                              'isMetaMask: ' + window.ethereum.isMetaMask + '\n' +
-                              'isConnected: ' + window.ethereum.isConnected());
+                    const isConnected = window.ethereum.isConnected();
+                    const isMyWallet = window.ethereum.isMyWallet || false;
+                    showResult('connectionResult', `钱包连接状态: ${isConnected ? '已连接' : '未连接'}\n钱包类型: ${isMyWallet ? 'MyWallet' : '其他钱包'}`, false);
+                } else if (typeof window.mywallet !== 'undefined') {
+                    showResult('connectionResult', '检测到 MyWallet 扩展！', false);
                 } else {
-                    showResult('❌ 未检测到钱包扩展，请确保已安装并启用扩展', true);
+                    showResult('connectionResult', '未检测到钱包扩展', true);
                 }
             } catch (error) {
-                showResult('❌ 连接测试失败: ' + error.message, true);
+                showResult('connectionResult', `连接测试失败: ${error.message}`, true);
             }
         }
 
-        async function testAccounts() {
+        async function requestAccounts() {
             try {
-                const accounts = await window.ethereum.request({
-                    method: 'eth_accounts'
-                });
-                showResult('✅ 账户列表:\n' + JSON.stringify(accounts, null, 2));
+                const provider = window.mywallet || window.ethereum;
+                const accounts = await provider.request({ method: 'eth_requestAccounts' });
+                showResult('connectionResult', `已连接账户: ${accounts.join(', ')}`, false);
             } catch (error) {
-                showResult('❌ 获取账户失败: ' + error.message, true);
+                showResult('connectionResult', `请求账户失败: ${error.message}`, true);
             }
         }
 
-        async function testChainId() {
+        async function getChainId() {
             try {
-                const chainId = await window.ethereum.request({
-                    method: 'eth_chainId'
-                });
-                showResult('✅ 当前链ID: ' + chainId);
+                const provider = window.mywallet || window.ethereum;
+                const chainId = await provider.request({ method: 'eth_chainId' });
+                const chainName = chainId === '0xaa36a7' ? 'Sepolia Testnet' : 
+                                chainId === '0x1' ? 'Ethereum Mainnet' : 
+                                chainId === '0x89' ? 'Polygon Mainnet' : 'Unknown';
+                showResult('connectionResult', `当前链ID: ${chainId} (${chainName})`, false);
             } catch (error) {
-                showResult('❌ 获取链ID失败: ' + error.message, true);
+                showResult('connectionResult', `获取链ID失败: ${error.message}`, true);
             }
         }
 
-        async function testRequestAccounts() {
+        async function getAccounts() {
             try {
-                const accounts = await window.ethereum.request({
-                    method: 'eth_requestAccounts'
-                });
-                showResult('✅ 请求账户成功:\n' + JSON.stringify(accounts, null, 2));
+                const provider = window.mywallet || window.ethereum;
+                const accounts = await provider.request({ method: 'eth_accounts' });
+                showResult('accountResult', `账户列表: ${accounts.join(', ')}`, false);
             } catch (error) {
-                showResult('❌ 请求账户失败: ' + error.message, true);
+                showResult('accountResult', `获取账户失败: ${error.message}`, true);
             }
         }
 
-        async function testSignMessage() {
+        async function getBalance() {
             try {
-                const message = 'Hello, Wallet Extension!';
-                const signature = await window.ethereum.request({
+                const provider = window.mywallet || window.ethereum;
+                const accounts = await provider.request({ method: 'eth_accounts' });
+                if (accounts.length === 0) {
+                    showResult('accountResult', '没有可用的账户', true);
+                    return;
+                }
+                const balance = await provider.request({
+                    method: 'eth_getBalance',
+                    params: [accounts[0]]
+                });
+                const balanceInEth = (parseInt(balance, 16) / Math.pow(10, 18)).toFixed(6);
+                showResult('accountResult', `账户 ${accounts[0]} 余额:\n${balance} (${balanceInEth} ETH)`, false);
+            } catch (error) {
+                showResult('accountResult', `获取余额失败: ${error.message}`, true);
+            }
+        }
+
+        async function signMessage() {
+            try {
+                const provider = window.mywallet || window.ethereum;
+                const accounts = await provider.request({ method: 'eth_accounts' });
+                if (accounts.length === 0) {
+                    showResult('accountResult', '没有可用的账户', true);
+                    return;
+                }
+                const signature = await provider.request({
                     method: 'personal_sign',
-                    params: [message, window.ethereum.selectedAddress]
+                    params: ['Hello MyWallet! 这是一个测试消息。', accounts[0]]
                 });
-                showResult('✅ 消息签名成功:\n消息: ' + message + '\n签名: ' + signature);
+                showResult('accountResult', `消息签名成功:\n${signature}`, false);
             } catch (error) {
-                showResult('❌ 消息签名失败: ' + error.message, true);
+                showResult('accountResult', `签名失败: ${error.message}`, true);
             }
         }
 
-        async function testAddChain() {
+        async function addEthereumChain() {
             try {
-                const chainConfig = {
+                const provider = window.mywallet || window.ethereum;
+                const result = await provider.request({
+                    method: 'wallet_addEthereumChain',
+                    params: [{
                     chainId: '0x89',
                     chainName: 'Polygon Mainnet',
                     rpcUrls: ['https://polygon-rpc.com'],
@@ -142,21 +268,208 @@
                         symbol: 'MATIC',
                         decimals: 18
                     }
-                };
-
-                await window.ethereum.request({
-                    method: 'wallet_addEthereumChain',
-                    params: [chainConfig]
+                    }]
                 });
-                showResult('✅ 网络添加成功:\n' + JSON.stringify(chainConfig, null, 2));
+                showResult('networkResult', '成功添加Polygon网络', false);
             } catch (error) {
-                showResult('❌ 添加网络失败: ' + error.message, true);
+                showResult('networkResult', `添加网络失败: ${error.message}`, true);
+            }
+        }
+
+        async function switchChain() {
+            try {
+                const provider = window.mywallet || window.ethereum;
+                await provider.request({
+                    method: 'wallet_switchEthereumChain',
+                    params: [{ chainId: '0xaa36a7' }] // 切换到Sepolia测试网
+                });
+                showResult('networkResult', '成功切换到Sepolia测试网', false);
+            } catch (error) {
+                showResult('networkResult', `切换网络失败: ${error.message}`, true);
+            }
+        }
+
+        async function sendEthTransaction() {
+            try {
+                if (!window.mywallet) {
+                    showResult('transactionResult', '此功能需要 MyWallet 扩展', true);
+                    return;
+                }
+                
+                const accounts = await window.mywallet.request({ method: 'eth_accounts' });
+                if (accounts.length === 0) {
+                    showResult('transactionResult', '没有可用的账户', true);
+                    return;
+                }
+                
+                // 发送0.001 ETH给自己
+                const txHash = await window.mywallet.sendEthTransaction(accounts[0], '0.001');
+                showResult('transactionResult', `ETH转账成功:\n交易哈希: ${txHash}`, false);
+            } catch (error) {
+                showResult('transactionResult', `发送ETH失败: ${error.message}`, true);
+            }
+        }
+
+        async function sendTokenTransaction() {
+            try {
+                if (!window.mywallet) {
+                    showResult('transactionResult', '此功能需要 MyWallet 扩展', true);
+                    return;
+                }
+                
+                const accounts = await window.mywallet.request({ method: 'eth_accounts' });
+                if (accounts.length === 0) {
+                    showResult('transactionResult', '没有可用的账户', true);
+                    return;
+                }
+                
+                const tokenAddress = document.getElementById('tokenAddressInput').value;
+                if (!tokenAddress) {
+                    showResult('transactionResult', '请输入代币地址', true);
+                    return;
+                }
+                
+                // 发送1个代币给自己
+                const txHash = await window.mywallet.sendTokenTransaction(tokenAddress, accounts[0], '1');
+                showResult('transactionResult', `代币转账成功:\n交易哈希: ${txHash}`, false);
+            } catch (error) {
+                showResult('transactionResult', `发送代币失败: ${error.message}`, true);
+            }
+        }
+
+        async function generateMnemonic() {
+            try {
+                if (!window.mywallet) {
+                    showResult('mnemonicResult', '此功能需要 MyWallet 扩展', true);
+                    return;
+                }
+                
+                const mnemonic = await window.mywallet.generateMnemonic();
+                showResult('mnemonicResult', `生成的助记词:\n${mnemonic}\n\n⚠️ 请安全保存此助记词！`, false);
+                document.getElementById('mnemonicInput').value = mnemonic;
+            } catch (error) {
+                showResult('mnemonicResult', `生成助记词失败: ${error.message}`, true);
+            }
+        }
+
+        async function importMnemonic() {
+            try {
+                if (!window.mywallet) {
+                    showResult('mnemonicResult', '此功能需要 MyWallet 扩展', true);
+                    return;
+                }
+                
+                const mnemonic = document.getElementById('mnemonicInput').value.trim();
+                const passphrase = document.getElementById('passphraseInput').value.trim();
+                
+                if (!mnemonic) {
+                    showResult('mnemonicResult', '请输入助记词', true);
+                    return;
+                }
+                
+                const result = await window.mywallet.importMnemonic(mnemonic, passphrase || undefined);
+                showResult('mnemonicResult', `助记词导入成功:\n账户数量: ${result.accounts.length}\n账户地址: ${result.accounts.map(a => a.address).join(', ')}`, false);
+            } catch (error) {
+                showResult('mnemonicResult', `导入助记词失败: ${error.message}`, true);
+            }
+        }
+
+        async function watchToken() {
+            try {
+                const provider = window.mywallet || window.ethereum;
+                const tokenAddress = document.getElementById('tokenAddressInput').value.trim();
+                
+                if (!tokenAddress) {
+                    showResult('tokenResult', '请输入代币地址', true);
+                    return;
+                }
+                
+                const result = await provider.request({
+                    method: 'wallet_watchAsset',
+                    params: [{
+                        type: 'ERC20',
+                        options: {
+                            address: tokenAddress,
+                            symbol: 'TOKEN',
+                            decimals: 18
+                        }
+                    }]
+                });
+                showResult('tokenResult', `代币添加成功: ${result}`, false);
+            } catch (error) {
+                showResult('tokenResult', `添加代币失败: ${error.message}`, true);
+            }
+        }
+
+        async function getWatchedTokens() {
+            try {
+                if (!window.mywallet) {
+                    showResult('tokenResult', '此功能需要 MyWallet 扩展', true);
+                    return;
+                }
+                
+                const tokens = await window.mywallet.getWatchedTokens();
+                if (tokens.length === 0) {
+                    showResult('tokenResult', '没有已观察的代币', false);
+                } else {
+                    const tokenList = tokens.map(token => 
+                        `${token.symbol} (${token.name})\n地址: ${token.address}\n类型: ${token.type}`
+                    ).join('\n\n');
+                    showResult('tokenResult', `已观察的代币:\n\n${tokenList}`, false);
+                }
+            } catch (error) {
+                showResult('tokenResult', `获取代币列表失败: ${error.message}`, true);
+            }
+        }
+
+        async function getTokenBalance() {
+            try {
+                if (!window.mywallet) {
+                    showResult('tokenResult', '此功能需要 MyWallet 扩展', true);
+                    return;
+                }
+                
+                const tokenAddress = document.getElementById('tokenAddressInput').value.trim();
+                if (!tokenAddress) {
+                    showResult('tokenResult', '请输入代币地址', true);
+                    return;
+                }
+                
+                const balance = await window.mywallet.getTokenBalance(tokenAddress);
+                const balanceDecimal = (parseInt(balance, 16) / Math.pow(10, 18)).toFixed(6);
+                showResult('tokenResult', `代币余额:\n原始值: ${balance}\n格式化: ${balanceDecimal}`, false);
+            } catch (error) {
+                showResult('tokenResult', `获取代币余额失败: ${error.message}`, true);
+            }
+        }
+
+        async function showSystemInfo() {
+            try {
+                const info = {
+                    '用户代理': navigator.userAgent,
+                    '页面URL': window.location.href,
+                    'MyWallet可用': typeof window.mywallet !== 'undefined',
+                    'Ethereum可用': typeof window.ethereum !== 'undefined',
+                    '扩展版本': typeof window.mywallet !== 'undefined' ? window.mywallet.version : 'N/A',
+                    '扩展名称': typeof window.mywallet !== 'undefined' ? window.mywallet.name : 'N/A'
+                };
+                
+                const infoText = Object.entries(info)
+                    .map(([key, value]) => `${key}: ${value}`)
+                    .join('\n');
+                
+                showResult('systemResult', infoText, false);
+            } catch (error) {
+                showResult('systemResult', `获取系统信息失败: ${error.message}`, true);
             }
         }
 
         // 页面加载时自动测试连接
         window.addEventListener('load', () => {
-            setTimeout(testConnection, 1000);
+            setTimeout(() => {
+                testConnection();
+                showSystemInfo();
+            }, 1000);
         });
     </script>
 </body>

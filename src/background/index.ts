@@ -14,7 +14,13 @@ async function handleEthereumRequest(request: any, sender: chrome.runtime.Messag
   try {
     console.log('Background handling ethereum request:', request);
     
-    const response = await rpcHandler.handleRequest(request);
+    // 创建请求上下文
+    const context = {
+      origin: sender.origin,
+      tabId: sender.tab?.id
+    };
+    
+    const response = await rpcHandler.handleRequest(request, context);
     sendResponse(response);
   } catch (error: any) {
     console.error('Error handling ethereum request:', error);
@@ -68,22 +74,36 @@ chrome.runtime.onConnect.addListener((port) => {
           break;
           
         case 'CREATE_WALLET':
-          const newWallet = await walletService.createWallet(message.name);
-          port.postMessage({
-            type: 'WALLET_CREATED',
-            data: newWallet
-          });
+          try {
+            const newWallet = await walletService.createWallet(message.name);
+            port.postMessage({
+              type: 'WALLET_CREATED',
+              data: newWallet
+            });
+          } catch (error: any) {
+            port.postMessage({
+              type: 'ERROR',
+              error: '创建钱包失败: ' + error.message
+            });
+          }
           break;
           
         case 'IMPORT_WALLET':
-          const importedWallet = await walletService.importWallet(
-            message.privateKey,
-            message.name
-          );
-          port.postMessage({
-            type: 'WALLET_IMPORTED',
-            data: importedWallet
-          });
+          try {
+            const importedWallet = await walletService.importWallet(
+              message.privateKey,
+              message.name
+            );
+            port.postMessage({
+              type: 'WALLET_IMPORTED',
+              data: importedWallet
+            });
+          } catch (error: any) {
+            port.postMessage({
+              type: 'ERROR',
+              error: '导入钱包失败: ' + error.message
+            });
+          }
           break;
           
         case 'SET_CHAIN_ID':

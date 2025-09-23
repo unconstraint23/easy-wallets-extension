@@ -162,7 +162,7 @@ function IndexPopup() {
 
   if (!isPasswordSet) {
     return (
-      <div className="w-96 h-[32rem] bg-gray-900 text-white p-6">
+      <div className="w-[400px] h-[32rem] bg-gray-900 text-white p-6">
         <div className="flex items-center mb-6">
           <Shield className="w-8 h-8 text-blue-500 mr-3" />
           <h1 className="text-xl font-bold">设置密码</h1>

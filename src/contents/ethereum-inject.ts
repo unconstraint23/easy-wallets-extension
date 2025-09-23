@@ -10,6 +10,7 @@ export const config = {
 // 创建 ethereum 对象
 const ethereum = {
   isMetaMask: false,
+  isMyWallet: true,
   isConnected: () => true,
   request: async (request: any) => {
     console.log('Ethereum request:', request);
@@ -71,6 +72,61 @@ const ethereum = {
   }
 };
 
+// 创建 mywallet 对象
+const mywallet = {
+  ...ethereum,
+  version: '1.0.0',
+  name: 'MyWallet',
+  
+  // 自定义方法
+  generateMnemonic: async () => {
+    return await ethereum.request({ method: 'wallet_generateMnemonic' });
+  },
+  
+  importMnemonic: async (mnemonic: string, passphrase?: string) => {
+    return await ethereum.request({ 
+      method: 'wallet_importMnemonic', 
+      params: [mnemonic, passphrase] 
+    });
+  },
+  
+  getTokenBalance: async (tokenAddress: string, walletAddress?: string) => {
+    const address = walletAddress || ethereum.selectedAddress;
+    if (!address) {
+      throw new Error('No wallet address available');
+    }
+    return await ethereum.request({ 
+      method: 'eth_getTokenBalance', 
+      params: [address, tokenAddress] 
+    });
+  },
+  
+  watchAsset: async (type: string, options: any) => {
+    return await ethereum.request({ 
+      method: 'wallet_watchAsset', 
+      params: [{ type, options }] 
+    });
+  },
+  
+  getWatchedTokens: async () => {
+    return await ethereum.request({ method: 'wallet_getWatchedTokens' });
+  },
+
+  sendEthTransaction: async (to: string, value: string) => {
+    return await ethereum.request({ 
+      method: 'wallet_sendEthTransaction', 
+      params: [to, value] 
+    });
+  },
+
+  sendTokenTransaction: async (tokenAddress: string, to: string, amount: string) => {
+    return await ethereum.request({ 
+      method: 'wallet_sendTokenTransaction', 
+      params: [tokenAddress, to, amount] 
+    });
+  }
+};
+
 // 注入到页面
 if (typeof window !== 'undefined') {
   // 检查是否已经存在 ethereum 对象
@@ -78,6 +134,10 @@ if (typeof window !== 'undefined') {
     (window as any).ethereum = ethereum;
     console.log('Ethereum object injected');
   }
+  
+  // 注入 mywallet 对象
+  (window as any).mywallet = mywallet;
+  console.log('MyWallet object injected');
   
   // 监听来自 background script 的消息
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -105,6 +165,7 @@ if (typeof window !== 'undefined') {
 // 导出类型定义
 export interface EthereumProvider {
   isMetaMask: boolean;
+  isMyWallet: boolean;
   isConnected: () => boolean;
   request: (request: any) => Promise<any>;
   on: (event: string, callback: Function) => void;
@@ -117,11 +178,24 @@ export interface EthereumProvider {
   sendAsync: (request: any, callback: Function) => void;
 }
 
+export interface MyWalletProvider extends EthereumProvider {
+  version: string;
+  name: string;
+  generateMnemonic: () => Promise<string>;
+  importMnemonic: (mnemonic: string, passphrase?: string) => Promise<any>;
+  getTokenBalance: (tokenAddress: string, walletAddress?: string) => Promise<string>;
+  watchAsset: (type: string, options: any) => Promise<boolean>;
+  getWatchedTokens: () => Promise<any[]>;
+  sendEthTransaction: (to: string, value: string) => Promise<string>;
+  sendTokenTransaction: (tokenAddress: string, to: string, amount: string) => Promise<string>;
+}
+
 // 添加默认导出
 export default ethereum;
 
 declare global {
   interface Window {
     ethereum?: EthereumProvider;
+    mywallet?: MyWalletProvider;
   }
 }

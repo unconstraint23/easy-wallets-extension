@@ -11,7 +11,10 @@
   },
   "dependencies": {
     "@metamask/browser-passworder": "^6.0.0",
+    "@scure/bip32": "^2.0.0",
+    "@scure/bip39": "^2.0.0",
     "autoprefixer": "^10.4.21",
+    "bip39": "^3.1.0",
     "eth-rpc-errors": "^4.0.3",
     "ethers": "^6.15.0",
     "lucide-react": "^0.544.0",

@@ -1,11 +1,21 @@
 import * as ethers from 'ethers';
 import * as passworder from '@metamask/browser-passworder';
 import { ethErrors } from 'eth-rpc-errors';
+import * as bip39 from 'bip39';
+import { HDKey } from '@scure/bip32';
+import { StorageManager, STORAGE_KEYS, type TokenAsset } from './storage';
 
 export interface WalletAccount {
   address: string;
   privateKey: string;
   name?: string;
+  derivationPath?: string;
+}
+
+export interface MnemonicWallet {
+  mnemonic: string;
+  accounts: WalletAccount[];
+  passphrase?: string;
 }
 
 export interface ChainConfig {
@@ -63,41 +73,52 @@ export class WalletService {
   // 创建新钱包
   async createWallet(name?: string): Promise<WalletAccount> {
     if (!this.password) {
-      throw ethErrors.rpc.invalidParams('Password not set');
+      throw new Error('Password not set');
     }
 
-    const wallet = ethers.Wallet.createRandom();
-    const account: WalletAccount = {
-      address: wallet.address,
-      privateKey: wallet.privateKey,
-      name: name || `Account ${Date.now()}`
-    };
+    try {
+      const wallet = ethers.Wallet.createRandom();
+      const account: WalletAccount = {
+        address: wallet.address,
+        privateKey: wallet.privateKey,
+        name: name || `Account ${Date.now()}`
+      };
 
-    await this.saveWallet(account);
-    this.currentAccount = account;
-    return account;
+      await this.saveWallet(account);
+      this.currentAccount = account;
+      return account;
+    } catch (error) {
+      console.error('Error creating wallet:', error);
+      throw new Error('Failed to create wallet: ' + (error as Error).message);
+    }
   }
 
   // 导入钱包
   async importWallet(privateKey: string, name?: string): Promise<WalletAccount> {
     if (!this.password) {
-      throw ethErrors.rpc.invalidParams('Password not set');
+      throw new Error('Password not set');
     }
+    
     try {
-      console.log('importWallet privateKey:', privateKey)
-      console.log(ethers)
-      const wallet = new ethers.Wallet(privateKey);
+      // 清理私钥格式
+      let cleanPrivateKey = privateKey.trim();
+      if (!cleanPrivateKey.startsWith('0x')) {
+        cleanPrivateKey = '0x' + cleanPrivateKey;
+      }
+      
+      const wallet = new ethers.Wallet(cleanPrivateKey);
       const account: WalletAccount = {
         address: wallet.address,
         privateKey: wallet.privateKey,
         name: name || `Imported Account ${Date.now()}`
       };
-      console.log('importWallet account:', account)
+      
       await this.saveWallet(account);
       this.currentAccount = account;
       return account;
     } catch (error) {
-      throw ethErrors.rpc.invalidParams('Invalid private key');
+      console.error('Error importing wallet:', error);
+      throw new Error('Invalid private key: ' + (error as Error).message);
     }
   }
 
@@ -108,7 +129,7 @@ export class WalletService {
 
     if (encryptedWallets) {
       try {
-        wallets = await passworder.decrypt(this.password!, encryptedWallets);
+        wallets = await passworder.decrypt(this.password!, encryptedWallets) as WalletAccount[];
       } catch {
         wallets = [];
       }
@@ -127,17 +148,18 @@ export class WalletService {
   }
 
   // 获取所有钱包
-  async getWallets(): Promise<any> {
+  async getWallets(): Promise<WalletAccount[]> {
     if (!this.password) {
-      throw ethErrors.rpc.invalidParams('Password not set');
+      throw new Error('Password not set');
     }
 
     const encryptedWallets = await this.getStorage('encryptedWallets');
     if (!encryptedWallets) return [];
 
     try {
-      return await passworder.decrypt(this.password, encryptedWallets);
-    } catch {
+      return await passworder.decrypt(this.password, encryptedWallets) as WalletAccount[];
+    } catch (error) {
+      console.error('Error decrypting wallets:', error);
       return [];
     }
   }
@@ -232,6 +254,199 @@ export class WalletService {
 
     const wallet = new ethers.Wallet(this.currentAccount.privateKey);
     return await wallet.signTransaction(transaction);
+  }
+
+  // 发送ETH转账
+  async sendEthTransaction(to: string, value: string, chainConfig: ChainConfig): Promise<string> {
+    if (!this.currentAccount) {
+      throw ethErrors.rpc.invalidParams('No account selected');
+    }
+
+    const provider = new ethers.JsonRpcProvider(chainConfig.rpcUrls[0], parseInt(chainConfig.chainId, 16));
+    const wallet = new ethers.Wallet(this.currentAccount.privateKey, provider);
+    
+    const transaction = {
+      to,
+      value: ethers.parseEther(value),
+      gasLimit: 21000n
+    };
+
+    const tx = await wallet.sendTransaction(transaction);
+    return tx.hash;
+  }
+
+  // 发送ERC20代币转账
+  async sendTokenTransaction(tokenAddress: string, to: string, amount: string, chainConfig: ChainConfig): Promise<string> {
+    if (!this.currentAccount) {
+      throw ethErrors.rpc.invalidParams('No account selected');
+    }
+
+    const provider = new ethers.JsonRpcProvider(chainConfig.rpcUrls[0], parseInt(chainConfig.chainId, 16));
+    const wallet = new ethers.Wallet(this.currentAccount.privateKey, provider);
+    
+    // ERC20 transfer 函数 ABI
+    const erc20Abi = [
+      "function transfer(address to, uint256 amount) returns (bool)",
+      "function decimals() view returns (uint8)",
+      "function symbol() view returns (string)"
+    ];
+    
+    const contract = new ethers.Contract(tokenAddress, erc20Abi, wallet);
+    
+    // 获取代币精度
+    const decimals = await contract.decimals();
+    const amountWithDecimals = ethers.parseUnits(amount, decimals);
+    
+    const tx = await contract.transfer(to, amountWithDecimals);
+    return tx.hash;
+  }
+
+  // 生成助记词
+  generateMnemonic(strength: number = 128): string {
+    return bip39.generateMnemonic(strength);
+  }
+
+  // 验证助记词
+  validateMnemonic(mnemonic: string): boolean {
+    return bip39.validateMnemonic(mnemonic);
+  }
+
+  // 从助记词创建HD钱包
+  async createMnemonicWallet(mnemonic: string, passphrase?: string, accountCount: number = 1): Promise<MnemonicWallet> {
+    if (!this.password) {
+      throw ethErrors.rpc.invalidParams('Password not set');
+    }
+
+    if (!this.validateMnemonic(mnemonic)) {
+      throw ethErrors.rpc.invalidParams('Invalid mnemonic');
+    }
+
+    const seed = await bip39.mnemonicToSeed(mnemonic, passphrase);
+    const hdKey = HDKey.fromMasterSeed(new Uint8Array(seed));
+    
+    const accounts: WalletAccount[] = [];
+    
+    for (let i = 0; i < accountCount; i++) {
+      // BIP44 路径: m/44'/60'/0'/0/i
+      const derivationPath = `m/44'/60'/0'/0/${i}`;
+      const derivedKey = hdKey.derive(derivationPath);
+      
+      if (!derivedKey.privateKey) {
+        throw new Error('Failed to derive private key');
+      }
+
+      const wallet = new ethers.Wallet(ethers.hexlify(derivedKey.privateKey));
+      const account: WalletAccount = {
+        address: wallet.address,
+        privateKey: wallet.privateKey,
+        name: `Account ${i + 1}`,
+        derivationPath
+      };
+      
+      accounts.push(account);
+      await this.saveWallet(account);
+    }
+
+    const mnemonicWallet: MnemonicWallet = {
+      mnemonic,
+      accounts,
+      passphrase
+    };
+
+    // 保存助记词钱包信息
+    await this.saveMnemonicWallet(mnemonicWallet);
+
+    return mnemonicWallet;
+  }
+
+  // 从助记词导入钱包
+  async importMnemonicWallet(mnemonic: string, passphrase?: string, accountCount: number = 1): Promise<MnemonicWallet> {
+    return this.createMnemonicWallet(mnemonic, passphrase, accountCount);
+  }
+
+  // 从助记词派生新账户
+  async deriveAccountFromMnemonic(mnemonic: string, accountIndex: number, passphrase?: string): Promise<WalletAccount> {
+    if (!this.password) {
+      throw ethErrors.rpc.invalidParams('Password not set');
+    }
+
+    if (!this.validateMnemonic(mnemonic)) {
+      throw ethErrors.rpc.invalidParams('Invalid mnemonic');
+    }
+
+    const seed = await bip39.mnemonicToSeed(mnemonic, passphrase);
+    const hdKey = HDKey.fromMasterSeed(new Uint8Array(seed));
+    
+    const derivationPath = `m/44'/60'/0'/0/${accountIndex}`;
+    const derivedKey = hdKey.derive(derivationPath);
+    
+    if (!derivedKey.privateKey) {
+      throw new Error('Failed to derive private key');
+    }
+
+    const wallet = new ethers.Wallet(ethers.hexlify(derivedKey.privateKey));
+    const account: WalletAccount = {
+      address: wallet.address,
+      privateKey: wallet.privateKey,
+      name: `Account ${accountIndex + 1}`,
+      derivationPath
+    };
+
+    await this.saveWallet(account);
+    return account;
+  }
+
+  // 保存助记词钱包
+  private async saveMnemonicWallet(mnemonicWallet: MnemonicWallet): Promise<void> {
+    const encryptedMnemonicWallets = await this.getStorage('encryptedMnemonicWallets');
+    let mnemonicWallets: MnemonicWallet[] = [];
+
+    if (encryptedMnemonicWallets) {
+      try {
+        mnemonicWallets = await passworder.decrypt(this.password!, encryptedMnemonicWallets) as MnemonicWallet[];
+      } catch {
+        mnemonicWallets = [];
+      }
+    }
+
+    // 检查是否已存在相同的助记词
+    const existingIndex = mnemonicWallets.findIndex(w => w.mnemonic === mnemonicWallet.mnemonic);
+    if (existingIndex >= 0) {
+      mnemonicWallets[existingIndex] = mnemonicWallet;
+    } else {
+      mnemonicWallets.push(mnemonicWallet);
+    }
+
+    const encrypted = await passworder.encrypt(this.password!, mnemonicWallets);
+    await this.setStorage('encryptedMnemonicWallets', encrypted);
+  }
+
+  // 获取助记词钱包
+  async getMnemonicWallets(): Promise<MnemonicWallet[]> {
+    if (!this.password) {
+      throw ethErrors.rpc.invalidParams('Password not set');
+    }
+
+    const encryptedMnemonicWallets = await this.getStorage('encryptedMnemonicWallets');
+    if (!encryptedMnemonicWallets) return [];
+
+    try {
+      return await passworder.decrypt(this.password, encryptedMnemonicWallets) as MnemonicWallet[];
+    } catch {
+      return [];
+    }
+  }
+
+  // 获取观察的代币列表
+  async getWatchedTokens(): Promise<TokenAsset[]> {
+    try {
+      const storage = StorageManager.getInstance();
+      const watchedTokens = await storage.getItem<TokenAsset[]>(STORAGE_KEYS.WATCHED_TOKENS) || [];
+      return watchedTokens;
+    } catch (error) {
+      console.error('Error getting watched tokens:', error);
+      return [];
+    }
   }
 }
 
