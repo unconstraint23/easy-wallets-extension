@@ -3,7 +3,6 @@ import * as passworder from '@metamask/browser-passworder';
 import { ethErrors } from 'eth-rpc-errors';
 import * as bip39 from 'bip39';
 import { HDKey } from '@scure/bip32';
-import { StorageManager, STORAGE_KEYS, type TokenAsset } from './storage';
 
 export interface WalletAccount {
   address: string;
@@ -433,18 +432,6 @@ export class WalletService {
     try {
       return await passworder.decrypt(this.password, encryptedMnemonicWallets) as MnemonicWallet[];
     } catch {
-      return [];
-    }
-  }
-
-  // 获取观察的代币列表
-  async getWatchedTokens(): Promise<TokenAsset[]> {
-    try {
-      const storage = StorageManager.getInstance();
-      const watchedTokens = await storage.getItem<TokenAsset[]>(STORAGE_KEYS.WATCHED_TOKENS) || [];
-      return watchedTokens;
-    } catch (error) {
-      console.error('Error getting watched tokens:', error);
       return [];
     }
   }

@@ -35,9 +35,13 @@
   },
   "manifest": {
     "host_permissions": [
-      "https://*/*",
+      "https://*/*", 
       "http://*/*"
     ],
+    "web_accessible_resources": [{
+      "matches": ["<all_urls>"],
+      "resources": ["inpage.*.js", "ethereum-inject.*.js"]
+    }],
     "permissions": [
       "storage",
       "activeTab",

@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Wallet, Plus, Download, Settings, Key, Shield, ArrowLeft, Coins, Eye, EyeOff } from 'lucide-react';
 import { useWallet } from '../commonprovider/commonProvider';
-import { providerManager } from '../lib/provider';
 
 interface WalletPageProps {
   onNavigate: (page: 'home' | 'wallet' | 'settings' | 'accountDetail') => void;
@@ -23,9 +22,7 @@ const WalletPage: React.FC<WalletPageProps> = ({ onNavigate }) => {
     importMnemonicWallet,
     selectAccount,
     selectChain,
-    addWatchedToken,
-    removeWatchedToken,
-    refreshWatchedTokens
+    addWatchedToken
   } = useWallet();
 
   const [showCreateWallet, setShowCreateWallet] = useState(false);
@@ -52,15 +49,6 @@ const WalletPage: React.FC<WalletPageProps> = ({ onNavigate }) => {
       selectAccount(wallets[0].address);
     }
   }, [wallets, currentAccount, selectAccount]);
-
-  // 定期刷新代币列表
-  useEffect(() => {
-    const interval = setInterval(() => {
-      refreshWatchedTokens();
-    }, 30000); // 每30秒刷新一次
-
-    return () => clearInterval(interval);
-  }, [refreshWatchedTokens]);
 
   const handleSetPassword = () => {
     console.log('Setting password:', passwordInput);
@@ -140,34 +128,20 @@ const WalletPage: React.FC<WalletPageProps> = ({ onNavigate }) => {
     }
   };
 
-  const handleAddToken = async () => {
+  const handleAddToken = () => {
     if (tokenAddress && tokenSymbol) {
-      try {
-        // 使用 wallet_watchAsset RPC 方法添加代币
-        const result = await providerManager.requestWalletMethod('wallet_watchAsset', [{
-          type: 'ERC20',
-          options: {
-            address: tokenAddress,
-            symbol: tokenSymbol,
-            decimals: parseInt(tokenDecimals) || 18,
-            image: undefined,
-          },
-        }]);
-        
-        if (result) {
-          console.log('Token added successfully');
-          // 刷新观察的代币列表
-          await refreshWatchedTokens();
-        }
-      } catch (error) {
-        console.error('Error adding token:', error);
-        alert('添加代币失败: ' + (error as Error).message);
-      } finally {
-        setShowAddToken(false);
-        setTokenAddress('');
-        setTokenSymbol('');
-        setTokenDecimals('18');
-      }
+      const token = {
+        address: tokenAddress,
+        symbol: tokenSymbol,
+        decimals: parseInt(tokenDecimals) || 18,
+        type: 'ERC20' as const,
+        name: tokenSymbol
+      };
+      addWatchedToken(token);
+      setShowAddToken(false);
+      setTokenAddress('');
+      setTokenSymbol('');
+      setTokenDecimals('18');
     }
   };
 
@@ -206,7 +180,7 @@ const WalletPage: React.FC<WalletPageProps> = ({ onNavigate }) => {
               placeholder="输入密码"
             />
           </div>
-
+          
           <button
             onClick={handleSetPassword}
             disabled={!passwordInput}
@@ -367,15 +341,13 @@ const WalletPage: React.FC<WalletPageProps> = ({ onNavigate }) => {
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="text-sm text-gray-300">
-                      {token.type === 'ERC20' ? '0.00' : 'N/A'}
-                    </p>
+                    <p className="text-sm text-gray-300">0.00</p>
                     <p className="text-xs text-gray-500">{formatAddress(token.address)}</p>
                   </div>
                 </div>
               </div>
             ))}
-
+            
             {watchedTokens.length === 0 && (
               <div className="text-center py-8 text-gray-500">
                 <Coins className="w-8 h-8 mx-auto mb-2 opacity-50" />
@@ -459,7 +431,7 @@ const WalletPage: React.FC<WalletPageProps> = ({ onNavigate }) => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-gray-800 rounded-lg p-6 w-96">
             <h3 className="text-lg font-bold mb-4">创建助记词钱包</h3>
-
+            
             <div className="mb-4">
               <label className="block text-sm font-medium mb-2">钱包名称（可选）</label>
               <input
@@ -519,7 +491,7 @@ const WalletPage: React.FC<WalletPageProps> = ({ onNavigate }) => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-gray-800 rounded-lg p-6 w-96">
             <h3 className="text-lg font-bold mb-4">导入助记词钱包</h3>
-
+            
             <div className="mb-4">
               <label className="block text-sm font-medium mb-2">钱包名称（可选）</label>
               <input
@@ -582,7 +554,7 @@ const WalletPage: React.FC<WalletPageProps> = ({ onNavigate }) => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-gray-800 rounded-lg p-6 w-72">
             <h3 className="text-lg font-bold mb-4">添加代币</h3>
-
+            
             <div className="mb-3">
               <label className="block text-sm font-medium mb-2">代币地址</label>
               <input
@@ -631,7 +603,7 @@ const WalletPage: React.FC<WalletPageProps> = ({ onNavigate }) => {
                 取消
               </button>
               <button
-                onClick={() => handleAddToken()}
+                onClick={handleAddToken}
                 disabled={!tokenAddress || !tokenSymbol}
                 className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white font-medium py-2 px-4 rounded-md transition-colors"
               >

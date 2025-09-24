@@ -12,8 +12,6 @@ export interface ChainConfig {
   }
 }
 
-let browserProvider: ethers.BrowserProvider | null = null;
-
 function normalizeChainId(chainId: string): number | null {
   if (!chainId) return null
   const str = String(chainId).trim()
@@ -144,45 +142,6 @@ export class ProviderManager {
 
   formatEther(value: bigint): string {
     return ethers.formatEther(value)
-  }
-
-  // 格式化代币金额
-  formatUnits(value: bigint, decimals: number): string {
-    return ethers.formatUnits(value, decimals)
-  }
-
-  // 解析代币金额
-  parseUnits(value: string, decimals: number): bigint {
-    return ethers.parseUnits(value, decimals)
-  }
-
-  // 获取浏览器钱包提供者
-  getBrowserProvider(): ethers.BrowserProvider | null {
-    if (typeof window === 'undefined' || !(window as any).ethereum) {
-      return null;
-    }
-    
-    if (!browserProvider) {
-      browserProvider = new ethers.BrowserProvider((window as any).ethereum);
-    }
-    
-    return browserProvider;
-  }
-
-  // 调用钱包方法
-  async requestWalletMethod(method: string, params?: any[]): Promise<any> {
-    const provider = this.getBrowserProvider();
-    if (!provider) {
-      throw new Error('No browser wallet provider available');
-    }
-
-    try {
-      const signer = await provider.getSigner();
-      return await provider.send(method, params || []);
-    } catch (error) {
-      console.error(`Error requesting wallet method ${method}:`, error);
-      throw error;
-    }
   }
 }
 
