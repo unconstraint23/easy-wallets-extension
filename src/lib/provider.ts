@@ -49,7 +49,6 @@ export class ProviderManager {
     const cached = this.urlToProvider.get(cacheKey)
     if (cached) return cached
 
-    // 关键修复：不强制传入 staticNetwork，让 ethers 自动探测，避免 NETWORK_ERROR
     const provider = new ethers.JsonRpcProvider(url)
     this.urlToProvider.set(cacheKey, provider)
     return provider
@@ -75,17 +74,24 @@ export class ProviderManager {
     return provider.getBalance(address)
   }
 
-  // 获取ERC20代币余额
-  async getTokenBalance(chain: ChainConfig, tokenAddress: string, walletAddress: string): Promise<bigint> {
-    const provider = this.getProviderForChain(chain)
-    
-    // ERC20 balanceOf 函数签名
-    const balanceOfAbi = [
-      "function balanceOf(address owner) view returns (uint256)"
-    ]
-    
-    const contract = new ethers.Contract(tokenAddress, balanceOfAbi, provider)
-    return await contract.balanceOf(walletAddress)
+  // 获取代币余额（ERC-20 或 ERC-721）
+  async getTokenBalance(
+    chain: ChainConfig,
+    tokenAddress: string,
+    tokenType: 'ERC20' | 'ERC721' | 'ERC1155',
+    decimals: number,
+    walletAddress: string
+  ): Promise<string> {
+    const provider = this.getProviderForChain(chain);
+    const abi = ["function balanceOf(address owner) view returns (uint256)"];
+    const contract = new ethers.Contract(tokenAddress, abi, provider);
+    const balance = await contract.balanceOf(walletAddress);
+
+    if (tokenType === 'ERC20') {
+      return ethers.formatUnits(balance, decimals);
+    } else { // ERC721 or ERC1155
+      return balance.toString();
+    }
   }
 
   // 获取ERC20代币信息

@@ -1,12 +1,10 @@
 import React, { useState } from 'react';
 import { Settings, ArrowLeft, Key, Network, Trash2, PlusCircle } from 'lucide-react';
 import { useWallet } from '../commonprovider/commonProvider';
+import { useNavigate } from 'react-router-dom';
 
-interface SettingsPageProps {
-  onNavigate: (page: 'home' | 'wallet' | 'settings') => void;
-}
-
-const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate }) => {
+const SettingsPage: React.FC = () => {
+  const navigate = useNavigate();
   const { wallets, chains, currentChainId, setChains } = useWallet();
   const [showAddNetwork, setShowAddNetwork] = useState(false)
   const [form, setForm] = useState({
@@ -37,20 +35,15 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate }) => {
   }
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col bg-gray-900 text-white">
       {/* 头部 */}
       <div className="p-4 border-b border-gray-700">
-        <div className="flex items-center">
-          <button
-            onClick={() => onNavigate('wallet')}
-            className="mr-3 p-1 text-gray-400 hover:text-white transition-colors"
-          >
+        <div className="flex items-center justify-between">
+          <button onClick={() => navigate(-1)} className="p-1 text-gray-400 hover:text-white">
             <ArrowLeft className="w-5 h-5" />
           </button>
-          <div className="flex items-center">
-            <Settings className="w-6 h-6 text-blue-500 mr-2" />
-            <h1 className="text-lg font-bold">设置</h1>
-          </div>
+          <h1 className="text-lg font-bold">设置</h1>
+          <div className="w-6"></div> {/* 占位符，保持标题居中 */}
         </div>
       </div>
 

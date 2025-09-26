@@ -1,13 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react"
-import { ArrowLeft, Wallet, Coins } from "lucide-react"
+import { ArrowLeft, Wallet, Coins, Send } from "lucide-react"
 import { useWallet } from "../commonprovider/commonProvider"
 import { providerManager } from "../lib/provider"
+import { useNavigate } from "react-router-dom"
 
-interface AccountDetailPageProps {
-  onNavigate: (page: 'home' | 'wallet' | 'settings') => void
-}
-
-const AccountDetailPage: React.FC<AccountDetailPageProps> = ({ onNavigate }) => {
+const AccountDetailPage: React.FC = () => {
+  const navigate = useNavigate();
   const { currentAccount, currentChainId, chains } = useWallet()
   const [balance, setBalance] = useState<string>("-")
   const [loading, setLoading] = useState<boolean>(false)
@@ -37,7 +35,7 @@ const AccountDetailPage: React.FC<AccountDetailPageProps> = ({ onNavigate }) => 
     return (
       <div className="h-full flex flex-col">
         <div className="p-4 border-b border-gray-700">
-          <button onClick={() => onNavigate('wallet')} className="p-1 text-gray-400 hover:text-white">
+          <button onClick={() => navigate('/wallet')} className="p-1 text-gray-400 hover:text-white">
             <ArrowLeft className="w-5 h-5" />
           </button>
         </div>
@@ -47,20 +45,20 @@ const AccountDetailPage: React.FC<AccountDetailPageProps> = ({ onNavigate }) => 
   }
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col bg-gray-900 text-white">
+      {/* 头部 */}
       <div className="p-4 border-b border-gray-700">
-        <div className="flex items-center">
-          <button onClick={() => onNavigate('wallet')} className="mr-3 p-1 text-gray-400 hover:text-white">
+        <div className="flex items-center justify-between">
+          <button onClick={() => navigate(-1)} className="p-1 text-gray-400 hover:text-white">
             <ArrowLeft className="w-5 h-5" />
           </button>
-          <div className="flex items-center">
-            <Wallet className="w-6 h-6 text-blue-500 mr-2" />
-            <h1 className="text-lg font-bold">账户详情</h1>
-          </div>
+          <h1 className="text-lg font-bold">账户详情</h1>
+          <div className="w-6"></div> {/* 占位符 */}
         </div>
       </div>
 
-      <div className="p-4 space-y-4">
+      {/* 内容 */}
+      <div className="flex-1 p-4 space-y-4">
         <div className="bg-gray-800 rounded-lg p-3">
           <div className="text-sm text-gray-400 mb-1">地址</div>
           <div className="font-mono">{currentAccount.address}</div>
@@ -82,6 +80,17 @@ const AccountDetailPage: React.FC<AccountDetailPageProps> = ({ onNavigate }) => 
             </div>
           </div>
         </div>
+      </div>
+
+      {/* 操作按钮 */}
+      <div className="p-4 mt-auto border-t border-gray-800">
+        <button
+          onClick={() => navigate('/transfer')}
+          className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-4 rounded-md transition duration-300 ease-in-out flex items-center justify-center"
+        >
+          <Send className="w-5 h-5 mr-2" />
+          转账
+        </button>
       </div>
     </div>
   )

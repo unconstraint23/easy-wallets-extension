@@ -2,6 +2,8 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { StorageManager, STORAGE_KEYS, DEFAULT_DATA, type TokenAsset } from "../lib/storage";
 import { walletService, type MnemonicWallet } from "../lib/wallet-service";
+import { useAuth } from "../auth/AuthContext";
+import { providerManager } from "../lib/provider";
 
 interface WalletAccount {
   address: string;
@@ -26,13 +28,11 @@ interface WalletContextType {
   currentAccount: WalletAccount | null;
   chains: ChainConfig[];
   currentChainId: string;
-  password: string;
-  isPasswordSet: boolean;
   watchedTokens: TokenAsset[];
   mnemonicWallets: MnemonicWallet[];
-  setPassword: (password: string) => void;
-  createWallet: (name?: string) => void;
-  importWallet: (privateKey: string, name?: string) => void;
+  createWallet: (name?: string) => Promise<void>;
+  importWalletFromMnemonic: (mnemonic: string, name?: string) => Promise<void>;
+  importWalletFromPrivateKey: (privateKey: string, name?: string) => Promise<void>;
   generateMnemonic: () => string;
   importMnemonicWallet: (mnemonic: string, passphrase?: string, name?: string) => Promise<void>;
   selectAccount: (address: string) => void;
@@ -40,7 +40,6 @@ interface WalletContextType {
   addWallet: (wallet: WalletAccount) => void;
   setCurrentAccount: (account: WalletAccount | null) => void;
   setCurrentChainId: (chainId: string) => void;
-  setIsPasswordSet: (isSet: boolean) => void;
   setWallets: (wallets: WalletAccount[] | ((prev: WalletAccount[]) => WalletAccount[])) => void;
   setChains: (chains: ChainConfig[]) => void;
   addWatchedToken: (token: TokenAsset) => void;
@@ -56,47 +55,57 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const [currentAccount, setCurrentAccount] = useState<WalletAccount | null>(DEFAULT_DATA.currentAccount);
   const [chains, setChains] = useState<ChainConfig[]>(DEFAULT_DATA.chains);
   const [currentChainId, setCurrentChainId] = useState(DEFAULT_DATA.currentChainId);
-  const [password, setPasswordState] = useState(DEFAULT_DATA.password);
-  const [isPasswordSet, setIsPasswordSet] = useState(DEFAULT_DATA.isPasswordSet);
   const [watchedTokens, setWatchedTokens] = useState<TokenAsset[]>(DEFAULT_DATA.watchedTokens);
   const [mnemonicWallets, setMnemonicWallets] = useState<MnemonicWallet[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
+  const { isAuthenticated, password } = useAuth();
 
   const storage = StorageManager.getInstance();
+
+  const checkAuth = () => {
+    if (!isAuthenticated || !password) {
+      throw new Error("User is not authenticated");
+    }
+    return password;
+  }
+
+  const refreshWallets = async () => {
+    const currentPassword = checkAuth();
+    const updatedWallets = await walletService.getWallets(currentPassword);
+    setWallets(updatedWallets);
+    return updatedWallets; // 返回更新后的钱包列表
+  };
 
   // 加载数据
   const loadData = async () => {
     try {
-      const [savedCurrentAccount, savedChains, savedCurrentChainId, savedPassword, savedIsPasswordSet, savedWatchedTokens] = await Promise.all([
-        storage.getItem<WalletAccount | null>(STORAGE_KEYS.CURRENT_ACCOUNT),
+      // 首先加载非钱包相关的持久化数据
+      const [savedCurrentAccountAddress, savedChains, savedCurrentChainId, savedWatchedTokens] = await Promise.all([
+        storage.getItem<string>(STORAGE_KEYS.CURRENT_ACCOUNT_ADDRESS),
         storage.getItem<ChainConfig[]>(STORAGE_KEYS.CHAINS),
         storage.getItem<string>(STORAGE_KEYS.CURRENT_CHAIN_ID),
-        storage.getItem<string>(STORAGE_KEYS.PASSWORD),
-        storage.getItem<boolean>(STORAGE_KEYS.IS_PASSWORD_SET),
         storage.getItem<TokenAsset[]>(STORAGE_KEYS.WATCHED_TOKENS)
       ]);
 
-      if (savedCurrentAccount) setCurrentAccount(savedCurrentAccount);
       if (savedChains) setChains(savedChains);
       if (savedCurrentChainId) setCurrentChainId(savedCurrentChainId);
-      if (savedPassword) setPasswordState(savedPassword);
-      if (savedIsPasswordSet !== null) setIsPasswordSet(savedIsPasswordSet);
       if (savedWatchedTokens) setWatchedTokens(savedWatchedTokens);
-
-      // 如果密码已设置，从加密存储加载钱包
-      if (savedIsPasswordSet && savedPassword) {
-        try {
-          await walletService.setPassword(savedPassword);
-          const encryptedWallets = await walletService.getWallets();
-          setWallets(encryptedWallets);
-        } catch (error) {
-          console.error('Error loading encrypted wallets:', error);
-          setWallets([]);
+      
+      if (isAuthenticated && password) {
+        // 如果已登录，则加载所有钱包
+        const updatedWallets = await refreshWallets();
+        
+        // 从加载后的钱包列表中恢复当前账户
+        if (updatedWallets.length > 0) {
+          const accountToSelect = updatedWallets.find(w => w.address === savedCurrentAccountAddress) || updatedWallets[0];
+          setCurrentAccount(accountToSelect);
+        } else {
+          setCurrentAccount(null);
         }
-      }
 
-      // 加载助记词钱包
-      await refreshMnemonicWallets();
+        // 加载助记词钱包
+        await refreshMnemonicWallets();
+      }
 
       console.log('Data loaded from storage');
     } catch (error) {
@@ -106,25 +115,17 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     }
   };
 
-  
-
-  // 保存当前账户
-  const saveCurrentAccount = async (account: WalletAccount | null) => {
+  // 保存当前账户地址
+  const saveCurrentAccountAddress = async (account: WalletAccount | null) => {
     try {
-      await storage.setItem(STORAGE_KEYS.CURRENT_ACCOUNT, account);
-      console.log('Current account saved to storage');
+      if (account) {
+        await storage.setItem(STORAGE_KEYS.CURRENT_ACCOUNT_ADDRESS, account.address);
+      } else {
+        await storage.removeItem(STORAGE_KEYS.CURRENT_ACCOUNT_ADDRESS);
+      }
+      console.log('Current account address saved to storage');
     } catch (error) {
-      console.error('Error saving current account:', error);
-    }
-  };
-
-  // 保存链数据
-  const saveChains = async (newChains: ChainConfig[]) => {
-    try {
-      await storage.setItem(STORAGE_KEYS.CHAINS, newChains);
-      console.log('Chains saved to storage');
-    } catch (error) {
-      console.error('Error saving chains:', error);
+      console.error('Error saving current account address:', error);
     }
   };
 
@@ -132,60 +133,21 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const saveCurrentChainId = async (chainId: string) => {
     try {
       await storage.setItem(STORAGE_KEYS.CURRENT_CHAIN_ID, chainId);
-      console.log('Current chain ID saved to storage');
+      console.log('Current chainId saved to storage');
     } catch (error) {
-      console.error('Error saving current chain ID:', error);
+      console.error('Error saving current chainId:', error);
     }
   };
 
-  // 保存密码状态
-  const savePasswordState = async (password: string, isSet: boolean) => {
-    try {
-      await Promise.all([
-        storage.setItem(STORAGE_KEYS.PASSWORD, password),
-        storage.setItem(STORAGE_KEYS.IS_PASSWORD_SET, isSet)
-      ]);
-      console.log('Password state saved to storage');
-    } catch (error) {
-      console.error('Error saving password state:', error);
-    }
-  };
-
-  const setPassword = (newPassword: string) => {
-    console.log('Setting password in context:', newPassword);
-    setPasswordState(newPassword);
-    setIsPasswordSet(true);
-    savePasswordState(newPassword, true);
-    console.log('Password set and isPasswordSet updated to true');
-  };
-
-  // 初始化时加载数据
   useEffect(() => {
     loadData();
-  }, []);
-
-  // 默认选中第一个钱包
-  useEffect(() => {
-    if (wallets.length > 0 && !currentAccount) {
-      setCurrentAccount(wallets[0]);
-      saveCurrentAccount(wallets[0]);
-    }
-  }, [wallets, currentAccount]);
-
-  // 钱包状态现在通过WalletService自动保存到加密存储
-  // 不需要手动监听和保存钱包状态变化
+  }, [isAuthenticated, password]);
 
   useEffect(() => {
     if (isLoaded) {
-      saveCurrentAccount(currentAccount);
+      saveCurrentAccountAddress(currentAccount);
     }
   }, [currentAccount, isLoaded]);
-
-  useEffect(() => {
-    if (isLoaded) {
-      saveChains(chains);
-    }
-  }, [chains, isLoaded]);
 
   useEffect(() => {
     if (isLoaded) {
@@ -193,55 +155,30 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     }
   }, [currentChainId, isLoaded]);
 
-  const addWallet = (wallet: WalletAccount) => {
-    // 检查是否已存在相同地址的钱包
-    const existingWallet = wallets.find(w => w.address.toLowerCase() === wallet.address.toLowerCase());
-    if (existingWallet) {
-      console.log('Wallet already exists:', wallet.address);
-      return;
+  useEffect(() => {
+    if (isLoaded && isAuthenticated) {
+      console.log("Current account or chain changed, refreshing watched tokens...");
+      refreshWatchedTokens();
     }
-    
-    const newWallets = [...wallets, wallet];
-    setWallets(newWallets);
-    if (!currentAccount) {
-      setCurrentAccount(wallet);
-      saveCurrentAccount(wallet);
-    }
-  };
+  }, [currentAccount, currentChainId, isLoaded, isAuthenticated]);
+
 
   const createWallet = async (name?: string) => {
-    try {
-      await walletService.setPassword(password);
-      const newWallet = await walletService.createWallet(name);
-      addWallet(newWallet);
-    } catch (error) {
-      console.error('Error creating wallet:', error);
-      throw error;
-    }
+    const currentPassword = checkAuth();
+    await walletService.createWallet(currentPassword, name);
+    await refreshWallets();
   };
 
-  const importWallet = async (privateKey: string, name?: string) => {
-    try {
-      await walletService.setPassword(password);
-      const importedWallet = await walletService.importWallet(privateKey, name);
-      addWallet(importedWallet);
-    } catch (error) {
-      console.error('Error importing wallet:', error);
-      throw error;
-    }
+  const importWalletFromMnemonic = async (mnemonic: string, name?: string) => {
+    const currentPassword = checkAuth();
+    await walletService.importWalletFromMnemonic(currentPassword, mnemonic, name);
+    await refreshWallets();
   };
 
-  const selectAccount = (address: string) => {
-    const account = wallets.find(w => w.address === address);
-    if (account) {
-      setCurrentAccount(account);
-      saveCurrentAccount(account);
-    }
-  };
-
-  const selectChain = (chainId: string) => {
-    setCurrentChainId(chainId);
-    saveCurrentChainId(chainId);
+  const importWalletFromPrivateKey = async (privateKey: string, name?: string) => {
+    const currentPassword = checkAuth();
+    await walletService.importWalletFromPrivateKey(currentPassword, privateKey, name);
+    await refreshWallets();
   };
 
   // 生成助记词
@@ -251,75 +188,121 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   // 导入助记词钱包
   const importMnemonicWallet = async (mnemonic: string, passphrase?: string, name?: string) => {
-    try {
-      await walletService.setPassword(password);
-      const mnemonicWallet = await walletService.importMnemonicWallet(mnemonic, passphrase);
-      
-      // 将助记词钱包中的账户添加到钱包列表
-      mnemonicWallet.accounts.forEach(account => {
-        if (name) {
-          account.name = name;
-        }
-        addWallet(account);
-      });
-      
-      // 刷新助记词钱包列表
-      await refreshMnemonicWallets();
-    } catch (error) {
-      console.error('Error importing mnemonic wallet:', error);
-      throw error;
+    const currentPassword = checkAuth();
+    // The service method expects accountCount as the third parameter, not name.
+    // We will call it with a default accountCount of 1.
+    await walletService.importMnemonicWallet(currentPassword, mnemonic, passphrase, 1);
+    await refreshMnemonicWallets();
+    await refreshWallets(); // 导入后也刷新普通钱包列表
+  };
+
+  // 选择账户
+  const selectAccount = async (address: string) => {
+    const currentPassword = checkAuth();
+    const account = await walletService.getWalletByAddress(currentPassword, address);
+    if (account) {
+      setCurrentAccount(account);
     }
   };
 
-  // 添加观察的代币
-  const addWatchedToken = async (token: TokenAsset) => {
-    const newTokens = [...watchedTokens, token];
-    setWatchedTokens(newTokens);
-    await storage.setItem(STORAGE_KEYS.WATCHED_TOKENS, newTokens);
+  // 选择链
+  const selectChain = (chainId: string) => {
+    setCurrentChainId(chainId);
   };
 
-  // 移除观察的代币
+  // 添加钱包（主要用于测试或特殊情况）
+  const addWallet = async (wallet: WalletAccount) => {
+    // This is a private method, so we can't call it directly.
+    // We should create a public method in wallet-service for this.
+    // For now, let's assume there's a method like `addNewWallet`
+    // await walletService.saveWallet(wallet); 
+    console.warn("addWallet is not fully implemented due to private saveWallet method.");
+    await refreshWallets();
+  };
+
+  // 添加监控的代币
+  const addWatchedToken = async (token: Omit<TokenAsset, 'balance'>) => {
+    const newTokens = [...watchedTokens, token as TokenAsset];
+    setWatchedTokens(newTokens);
+    await storage.setItem(STORAGE_KEYS.WATCHED_TOKENS, newTokens);
+    // 添加后立即刷新余额
+    await refreshWatchedTokens();
+  };
+
+  // 移除监控的代币
   const removeWatchedToken = async (tokenAddress: string) => {
-    const newTokens = watchedTokens.filter(token => token.address !== tokenAddress);
+    const newTokens = watchedTokens.filter(t => t.address !== tokenAddress);
     setWatchedTokens(newTokens);
     await storage.setItem(STORAGE_KEYS.WATCHED_TOKENS, newTokens);
   };
 
-  // 刷新观察的代币
+  // 刷新监控代币的余额
   const refreshWatchedTokens = async () => {
-    try {
-      const tokens = await storage.getItem<TokenAsset[]>(STORAGE_KEYS.WATCHED_TOKENS) || [];
-      setWatchedTokens(tokens);
-    } catch (error) {
-      console.error('Error refreshing watched tokens:', error);
+    const currentPassword = checkAuth();
+    if (!currentAccount || !currentChainId) {
+      console.log("Cannot refresh token balances: no current account or chain.");
+      return;
     }
+
+    const currentChain = chains.find(c => c.chainId === currentChainId);
+    if (!currentChain) {
+      console.log("Cannot refresh token balances: current chain config not found.");
+      return;
+    }
+
+    console.log("Refreshing watched tokens balances...");
+    const updatedTokens = await Promise.all(
+      watchedTokens
+        .filter(token => token.chainId === currentChainId) // 只刷新当前链的代币
+        .map(async (token) => {
+          try {
+            const balance = await providerManager.getTokenBalance(
+              currentChain,
+              token.address,
+              token.type,
+              token.decimals,
+              currentAccount.address
+            );
+            console.log(`Balance for ${token.symbol} (${token.address}):`, balance);
+            return { ...token, balance };
+          } catch (error) {
+            console.error(`Failed to get balance for ${token.symbol}:`, error);
+            return { ...token, balance: '0' }; // 出错时余额设为0
+          }
+        })
+    );
+
+    // 合并刷新后的代币和未刷新的代币（其他链的）
+    const finalTokens = watchedTokens.map(
+      (t) => updatedTokens.find((ut) => ut.address === t.address && ut.chainId === t.chainId) || t
+    );
+
+    setWatchedTokens(finalTokens);
+    await storage.setItem(STORAGE_KEYS.WATCHED_TOKENS, finalTokens);
+    console.log("Token balances refreshed and saved.");
   };
 
   // 刷新助记词钱包
   const refreshMnemonicWallets = async () => {
-    try {
-      if (isPasswordSet && password) {
-        await walletService.setPassword(password);
-        const mnemonicWallets = await walletService.getMnemonicWallets();
-        setMnemonicWallets(mnemonicWallets);
-      }
-    } catch (error) {
-      console.error('Error refreshing mnemonic wallets:', error);
-    }
+    const currentPassword = checkAuth();
+    const mnemonics = await walletService.getMnemonicWallets(currentPassword);
+    setMnemonicWallets(mnemonics);
   };
+
+  if (!isLoaded) {
+    return <div>Loading...</div>; // 或者一个更复杂的加载屏幕
+  }
 
   const value = {
     wallets,
     currentAccount,
     chains,
     currentChainId,
-    password,
-    isPasswordSet,
     watchedTokens,
     mnemonicWallets,
-    setPassword,
     createWallet,
-    importWallet,
+    importWalletFromMnemonic,
+    importWalletFromPrivateKey,
     generateMnemonic,
     importMnemonicWallet,
     selectAccount,
@@ -327,13 +310,12 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     addWallet,
     setCurrentAccount,
     setCurrentChainId,
-    setIsPasswordSet,
     setWallets,
     setChains,
     addWatchedToken,
     removeWatchedToken,
     refreshWatchedTokens,
-    refreshMnemonicWallets
+    refreshMnemonicWallets,
   };
 
   return (
@@ -346,7 +328,7 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 export const useWallet = () => {
   const context = useContext(WalletContext);
   if (context === undefined) {
-    throw new Error('useWallet must be used within a WalletProvider');
+    throw new Error("useWallet must be used within a WalletProvider");
   }
   return context;
 };

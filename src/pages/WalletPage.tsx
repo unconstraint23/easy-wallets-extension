@@ -1,35 +1,31 @@
 import React, { useState, useEffect } from 'react';
 import { Wallet, Plus, Download, Settings, Key, Shield, ArrowLeft, Coins, Eye, EyeOff } from 'lucide-react';
 import { useWallet } from '../commonprovider/commonProvider';
+import { useNavigate } from 'react-router-dom';
 
-interface WalletPageProps {
-  onNavigate: (page: 'home' | 'wallet' | 'settings' | 'accountDetail') => void;
-}
-
-const WalletPage: React.FC<WalletPageProps> = ({ onNavigate }) => {
+const WalletPage: React.FC = () => {
+  const navigate = useNavigate();
   const { 
     wallets, 
     currentAccount, 
     chains, 
     currentChainId,
-    password,
-    isPasswordSet,
     watchedTokens,
-    setPassword,
     createWallet,
-    importWallet,
     generateMnemonic,
     importMnemonicWallet,
+    importWalletFromPrivateKey,
     selectAccount,
     selectChain,
-    addWatchedToken
+    addWatchedToken,
+    refreshWatchedTokens
   } = useWallet();
 
   const [showCreateWallet, setShowCreateWallet] = useState(false);
   const [showImportWallet, setShowImportWallet] = useState(false);
   const [showMnemonicWallet, setShowMnemonicWallet] = useState(false);
   const [showImportMnemonic, setShowImportMnemonic] = useState(false);
-  const [showAddToken, setShowAddToken] = useState(false);
+ 
   const [newWalletName, setNewWalletName] = useState('');
   const [importPrivateKey, setImportPrivateKey] = useState('');
   const [importWalletName, setImportWalletName] = useState('');
@@ -38,27 +34,17 @@ const WalletPage: React.FC<WalletPageProps> = ({ onNavigate }) => {
   const [importMnemonic, setImportMnemonic] = useState('');
   const [mnemonicPassphrase, setMnemonicPassphrase] = useState('');
   const [mnemonicWalletName, setMnemonicWalletName] = useState('');
-  const [tokenAddress, setTokenAddress] = useState('');
-  const [tokenSymbol, setTokenSymbol] = useState('');
-  const [tokenDecimals, setTokenDecimals] = useState('18');
   const [showMnemonic, setShowMnemonic] = useState(false);
 
   // 默认选中第一个钱包
   useEffect(() => {
+    console.log(wallets)
     if (wallets.length > 0 && !currentAccount) {
       selectAccount(wallets[0].address);
     }
   }, [wallets, currentAccount, selectAccount]);
 
-  const handleSetPassword = () => {
-    console.log('Setting password:', passwordInput);
-    if (passwordInput) {
-      setPassword(passwordInput);
-      console.log('Password set successfully');
-    } else {
-      console.log('Password input is empty');
-    }
-  };
+
 
   const handleCreateWallet = async () => {
     try {
@@ -78,9 +64,9 @@ const WalletPage: React.FC<WalletPageProps> = ({ onNavigate }) => {
   const handleImportWallet = async () => {
     try {
       if (importPrivateKey && importWalletName.trim()) {
-        await importWallet(importPrivateKey, importWalletName.trim());
+        await importWalletFromPrivateKey(importPrivateKey, importWalletName.trim());
       } else if (importPrivateKey) {
-        await importWallet(importPrivateKey);
+        await importWalletFromPrivateKey(importPrivateKey);
       } else {
         alert('请输入私钥');
         return;
@@ -128,92 +114,23 @@ const WalletPage: React.FC<WalletPageProps> = ({ onNavigate }) => {
     }
   };
 
-  const handleAddToken = () => {
-    if (tokenAddress && tokenSymbol) {
-      const token = {
-        address: tokenAddress,
-        symbol: tokenSymbol,
-        decimals: parseInt(tokenDecimals) || 18,
-        type: 'ERC20' as const,
-        name: tokenSymbol
-      };
-      addWatchedToken(token);
-      setShowAddToken(false);
-      setTokenAddress('');
-      setTokenSymbol('');
-      setTokenDecimals('18');
-    }
-  };
+  
 
   const formatAddress = (address: string) => {
     return `${address.slice(0, 6)}...${address.slice(-4)}`;
   };
 
-  if (!isPasswordSet) {
-    return (
-      <div className="h-full flex flex-col">
-        {/* 头部 */}
-        <div className="p-4 border-b border-gray-700">
-          <div className="flex items-center">
-            <button
-              onClick={() => onNavigate('home')}
-              className="mr-3 p-1 text-gray-400 hover:text-white transition-colors"
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </button>
-            <div className="flex items-center">
-              <Shield className="w-6 h-6 text-blue-500 mr-2" />
-              <h1 className="text-lg font-bold">设置密码</h1>
-            </div>
-          </div>
-        </div>
-
-        {/* 密码设置 */}
-        <div className="flex-1 p-6">
-          <div className="mb-4">
-            <label className="block text-sm font-medium mb-2">设置钱包密码</label>
-            <input
-              type="password"
-              value={passwordInput}
-              onChange={(e) => setPasswordInput(e.target.value)}
-              className="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="输入密码"
-            />
-          </div>
-          
-          <button
-            onClick={handleSetPassword}
-            disabled={!passwordInput}
-            className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white font-medium py-2 px-4 rounded-md transition-colors"
-          >
-            确认密码
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col bg-gray-900 text-white">
       {/* 头部 */}
       <div className="p-4 border-b border-gray-700">
         <div className="flex items-center justify-between">
-          <div className="flex items-center">
-            <button
-              onClick={() => onNavigate('home')}
-              className="mr-3 p-1 text-gray-400 hover:text-white transition-colors"
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </button>
-            <div className="flex items-center">
-              <Wallet className="w-6 h-6 text-blue-500 mr-2" />
-              <h1 className="text-lg font-bold">钱包</h1>
-            </div>
-          </div>
-          <button
-            onClick={() => onNavigate('settings')}
-            className="p-1 text-gray-400 hover:text-white transition-colors"
-          >
+          <button onClick={() => navigate(-1)} className="p-1 text-gray-400 hover:text-white">
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <h1 className="text-lg font-bold">钱包管理</h1>
+          <button onClick={() => navigate('/settings')} className="p-1 text-gray-400 hover:text-white">
             <Settings className="w-5 h-5" />
           </button>
         </div>
@@ -223,7 +140,7 @@ const WalletPage: React.FC<WalletPageProps> = ({ onNavigate }) => {
       {currentAccount && (
         <div className="p-4 border-b border-gray-700">
           <h2 className="text-sm font-medium text-gray-400 mb-2">当前账户</h2>
-          <button onClick={() => onNavigate('accountDetail')} className="w-full text-left">
+          <button onClick={() => navigate('/account-detail')} className="w-full text-left">
             <div className="bg-gray-800 rounded-lg p-3 hover:bg-gray-700">
               <div className="flex items-center justify-between">
                 <div>
@@ -318,7 +235,7 @@ const WalletPage: React.FC<WalletPageProps> = ({ onNavigate }) => {
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-medium text-gray-400">代币</h2>
             <button
-              onClick={() => setShowAddToken(true)}
+              onClick={() => navigate('/add-token')}
               className="p-1 text-blue-500 hover:bg-gray-800 rounded"
               title="添加代币"
             >
@@ -549,70 +466,7 @@ const WalletPage: React.FC<WalletPageProps> = ({ onNavigate }) => {
         </div>
       )}
 
-      {/* 添加代币模态框 */}
-      {showAddToken && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-lg p-6 w-72">
-            <h3 className="text-lg font-bold mb-4">添加代币</h3>
-            
-            <div className="mb-3">
-              <label className="block text-sm font-medium mb-2">代币地址</label>
-              <input
-                type="text"
-                value={tokenAddress}
-                onChange={(e) => setTokenAddress(e.target.value)}
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="0x..."
-              />
-            </div>
-
-            <div className="mb-3">
-              <label className="block text-sm font-medium mb-2">代币符号</label>
-              <input
-                type="text"
-                value={tokenSymbol}
-                onChange={(e) => setTokenSymbol(e.target.value)}
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="USDT"
-              />
-            </div>
-
-            <div className="mb-4">
-              <label className="block text-sm font-medium mb-2">小数位数</label>
-              <input
-                type="number"
-                value={tokenDecimals}
-                onChange={(e) => setTokenDecimals(e.target.value)}
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="18"
-                min="0"
-                max="18"
-              />
-            </div>
-
-            <div className="flex space-x-3">
-              <button
-                onClick={() => {
-                  setShowAddToken(false);
-                  setTokenAddress('');
-                  setTokenSymbol('');
-                  setTokenDecimals('18');
-                }}
-                className="flex-1 bg-gray-600 hover:bg-gray-700 text-white font-medium py-2 px-4 rounded-md transition-colors"
-              >
-                取消
-              </button>
-              <button
-                onClick={handleAddToken}
-                disabled={!tokenAddress || !tokenSymbol}
-                className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white font-medium py-2 px-4 rounded-md transition-colors"
-              >
-                添加代币
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+  
     </div>
   );
 };

@@ -1,9 +1,14 @@
+import { CryptoService } from './crypto-service';
+
 // 代币接口
 export interface TokenAsset {
   address: string;
   symbol: string;
   decimals: number;
   image?: string;
+  logoURI?: string; // 添加这个可选字段
+  chainId: string; // 添加 chainId
+  balance?: string; // 用于存储余额
   type: 'ERC20' | 'ERC721' | 'ERC1155';
   name?: string;
   tokenId?: string; // 对于ERC721/ERC1155
@@ -14,6 +19,18 @@ export interface ConnectionPermission {
   accounts: string[];
   timestamp: number;
 }
+
+// 存储键名常量
+export const STORAGE_KEYS = {
+  PASSWORD: 'password_hash',
+  WALLETS: 'encryptedWallets',
+  MNEMONIC_WALLETS: 'encryptedMnemonicWallets',
+  CURRENT_ACCOUNT_ADDRESS: 'current_account_address',
+  CHAINS: 'chains',
+  CURRENT_CHAIN_ID: 'current_chain_id',
+  WATCHED_TOKENS: 'watched_tokens',
+  CONNECTIONS: 'connections',
+} as const;
 
 // 存储工具类
 export class StorageManager {
@@ -89,21 +106,13 @@ export class StorageManager {
   removeChangedListener(callback: (changes: { [key: string]: chrome.storage.StorageChange }) => void): void {
     chrome.storage.onChanged.removeListener(callback);
   }
-}
 
-// 存储键名常量
-export const STORAGE_KEYS = {
-  WALLETS: 'wallets',
-  CURRENT_ACCOUNT: 'currentAccount',
-  CHAINS: 'chains',
-  CURRENT_CHAIN_ID: 'currentChainId',
-  PASSWORD: 'password',
-  IS_PASSWORD_SET: 'isPasswordSet',
-  CURRENT_PAGE: 'currentPage',
-  WATCHED_TOKENS: 'watchedTokens',
-  MNEMONIC_WALLETS: 'mnemonicWallets',
-  CONNECTION_PERMISSIONS: 'connectionPermissions'
-} as const;
+  // 设置密码并加密存储
+  async setPassword(password: string): Promise<void> {
+    const encryptedPassword = CryptoService.encrypt(password);
+    await this.setItem(STORAGE_KEYS.PASSWORD, encryptedPassword);
+  }
+}
 
 // 默认数据
 export const DEFAULT_DATA = {

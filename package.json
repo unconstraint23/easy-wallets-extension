@@ -13,8 +13,11 @@
     "@metamask/browser-passworder": "^6.0.0",
     "@scure/bip32": "^2.0.0",
     "@scure/bip39": "^2.0.0",
+    "@types/aes-js": "^3.1.4",
+    "aes-js": "^3.1.2",
     "autoprefixer": "^10.4.21",
     "bip39": "^3.1.0",
+    "crypto-js": "^4.2.0",
     "eth-rpc-errors": "^4.0.3",
     "ethers": "^6.15.0",
     "lucide-react": "^0.544.0",
@@ -22,26 +25,35 @@
     "postcss": "^8.5.6",
     "react": "18.2.0",
     "react-dom": "18.2.0",
+    "react-router-dom": "^7.9.1",
     "tailwindcss": "3.4.13"
   },
   "devDependencies": {
     "@ianvs/prettier-plugin-sort-imports": "4.1.1",
     "@types/chrome": "0.0.258",
+    "@types/crypto-js": "^4.2.2",
     "@types/node": "20.11.5",
     "@types/react": "18.2.48",
     "@types/react-dom": "18.2.18",
+    "@types/react-router-dom": "^5.3.3",
     "prettier": "3.2.4",
     "typescript": "5.3.3"
   },
   "manifest": {
     "host_permissions": [
-      "https://*/*", 
+      "https://*/*",
       "http://*/*"
     ],
-    "web_accessible_resources": [{
-      "matches": ["<all_urls>"],
-      "resources": ["inpage.*.js", "ethereum-inject.*.js"]
-    }],
+    "web_accessible_resources": [
+      {
+        "matches": [
+          "<all_urls>"
+        ],
+        "resources": [
+          "inpage.js"
+        ]
+      }
+    ],
     "permissions": [
       "storage",
       "activeTab",

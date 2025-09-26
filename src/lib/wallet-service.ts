@@ -30,7 +30,6 @@ export interface ChainConfig {
 }
 
 export class WalletService {
-  private password: string | null = null;
   private currentAccount: WalletAccount | null = null;
   private currentChainId: string = '0x1'; // 默认以太坊主网
 
@@ -51,28 +50,12 @@ export class WalletService {
     });
   }
 
-  // 设置密码
-  async setPassword(password: string): Promise<void> {
-    this.password = password;
-  }
 
-  // 验证密码
-  async verifyPassword(password: string): Promise<boolean> {
-    try {
-      const encryptedWallets = await this.getStorage('encryptedWallets');
-      if (!encryptedWallets) return true; // 如果没有钱包，任何密码都可以
-
-      const decrypted = await passworder.decrypt(password, encryptedWallets);
-      return Array.isArray(decrypted);
-    } catch {
-      return false;
-    }
-  }
 
   // 创建新钱包
-  async createWallet(name?: string): Promise<WalletAccount> {
-    if (!this.password) {
-      throw new Error('Password not set');
+  async createWallet(password: string, name?: string): Promise<WalletAccount> {
+    if (!password) {
+      throw new Error('Password not provided');
     }
 
     try {
@@ -83,7 +66,7 @@ export class WalletService {
         name: name || `Account ${Date.now()}`
       };
 
-      await this.saveWallet(account);
+      await this.saveWallet(password, account);
       this.currentAccount = account;
       return account;
     } catch (error) {
@@ -93,42 +76,69 @@ export class WalletService {
   }
 
   // 导入钱包
-  async importWallet(privateKey: string, name?: string): Promise<WalletAccount> {
-    if (!this.password) {
-      throw new Error('Password not set');
+  async importWalletFromPrivateKey(password: string, privateKey: string, name?: string): Promise<WalletAccount> {
+    if (!password) {
+      throw new Error('Password not provided');
     }
     
     try {
-      // 清理私钥格式
-      let cleanPrivateKey = privateKey.trim();
-      if (!cleanPrivateKey.startsWith('0x')) {
-        cleanPrivateKey = '0x' + cleanPrivateKey;
+      // 验证私钥
+      if (!privateKey.startsWith('0x')) {
+        privateKey = '0x' + privateKey;
       }
-      
-      const wallet = new ethers.Wallet(cleanPrivateKey);
+      const wallet = new ethers.Wallet(privateKey);
       const account: WalletAccount = {
         address: wallet.address,
         privateKey: wallet.privateKey,
         name: name || `Imported Account ${Date.now()}`
       };
-      
-      await this.saveWallet(account);
+
+      await this.saveWallet(password, account);
       this.currentAccount = account;
       return account;
     } catch (error) {
-      console.error('Error importing wallet:', error);
-      throw new Error('Invalid private key: ' + (error as Error).message);
+      console.error('Error importing wallet from private key:', error);
+      throw new Error('无效的私钥');
     }
   }
 
-  // 保存钱包到存储
-  private async saveWallet(account: WalletAccount): Promise<void> {
+  // 从助记词导入钱包
+  async importWalletFromMnemonic(password: string, mnemonic: string, name?: string): Promise<WalletAccount> {
+    if (!password) {
+      throw new Error('Password not provided');
+    }
+    try {
+      // 验证助记词
+      if (!ethers.Mnemonic.isValidMnemonic(mnemonic)) {
+        throw new Error('无效的助记词');
+      }
+      const wallet = ethers.Wallet.fromPhrase(mnemonic);
+      const account: WalletAccount = {
+        address: wallet.address,
+        privateKey: wallet.privateKey,
+        name: name || `Imported Account ${Date.now()}`
+      };
+
+      await this.saveWallet(password, account);
+      this.currentAccount = account;
+      return account;
+    } catch (error) {
+      console.error('Error importing wallet from mnemonic:', error);
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error('从助记词导入钱包失败');
+    }
+  }
+
+  // 保存钱包到加密存储
+  private async saveWallet(password: string, account: WalletAccount): Promise<void> {
     const encryptedWallets = await this.getStorage('encryptedWallets');
     let wallets: WalletAccount[] = [];
 
     if (encryptedWallets) {
       try {
-        wallets = await passworder.decrypt(this.password!, encryptedWallets) as WalletAccount[];
+        wallets = await passworder.decrypt(password, encryptedWallets) as WalletAccount[];
       } catch {
         wallets = [];
       }
@@ -142,21 +152,21 @@ export class WalletService {
       wallets.push(account);
     }
 
-    const encrypted = await passworder.encrypt(this.password!, wallets);
+    const encrypted = await passworder.encrypt(password, wallets);
     await this.setStorage('encryptedWallets', encrypted);
   }
 
   // 获取所有钱包
-  async getWallets(): Promise<WalletAccount[]> {
-    if (!this.password) {
-      throw new Error('Password not set');
+  async getWallets(password: string): Promise<WalletAccount[]> {
+    if (!password) {
+      throw new Error('Password not provided');
     }
 
     const encryptedWallets = await this.getStorage('encryptedWallets');
     if (!encryptedWallets) return [];
 
     try {
-      return await passworder.decrypt(this.password, encryptedWallets) as WalletAccount[];
+      return await passworder.decrypt(password, encryptedWallets) as WalletAccount[];
     } catch (error) {
       console.error('Error decrypting wallets:', error);
       return [];
@@ -164,8 +174,8 @@ export class WalletService {
   }
 
   // 设置当前账户
-  async setCurrentAccount(address: string): Promise<void> {
-    const wallets = await this.getWallets();
+  async setCurrentAccount(password: string, address: string): Promise<void> {
+    const wallets = await this.getWallets(password);
     const account = wallets.find(w => w.address === address);
     if (!account) {
       throw ethErrors.rpc.invalidParams('Account not found');
@@ -191,6 +201,26 @@ export class WalletService {
   // 获取当前链ID
   getCurrentChainId(): string {
     return this.currentChainId;
+  }
+
+  // 获取当前 RPC URL
+  getCurrentRpcUrl(): string {
+    // 这里可以根据 currentChainId 从预设的链配置中获取
+    // 为简单起见，我们暂时硬编码
+    return 'https://mainnet.infura.io/v3/YOUR_INFURA_PROJECT_ID'; // 请替换为你的 Infura Project ID
+  }
+
+  // 根据地址获取钱包
+  async getWalletByAddress(password: string, address: string): Promise<WalletAccount | null> {
+    if (!password) {
+      return null;
+    }
+    const encryptedWallets = await this.getStorage('encryptedWallets');
+    if (!encryptedWallets) {
+      return null;
+    }
+    const wallets = (await passworder.decrypt(password, encryptedWallets)) as WalletAccount[];
+    return wallets.find(w => w.address.toLowerCase() === address.toLowerCase()) || null;
   }
 
   // 添加网络
@@ -255,29 +285,43 @@ export class WalletService {
     return await wallet.signTransaction(transaction);
   }
 
-  // 发送ETH转账
-  async sendEthTransaction(to: string, value: string, chainConfig: ChainConfig): Promise<string> {
-    if (!this.currentAccount) {
-      throw ethErrors.rpc.invalidParams('No account selected');
+  // 发送 ETH 交易
+  async sendEthTransaction(password: string, from: string, to: string, value: string): Promise<string> {
+    if (!password) {
+      throw new Error('Password not provided');
     }
 
-    const provider = new ethers.JsonRpcProvider(chainConfig.rpcUrls[0], parseInt(chainConfig.chainId, 16));
-    const wallet = new ethers.Wallet(this.currentAccount.privateKey, provider);
-    
-    const transaction = {
-      to,
-      value: ethers.parseEther(value),
-      gasLimit: 21000n
+    const wallet = await this.getWalletByAddress(password, from);
+    if (!wallet) {
+      throw new Error('Sender wallet not found');
+    }
+
+    const provider = new ethers.JsonRpcProvider(this.getCurrentRpcUrl());
+    const ethWallet = new ethers.Wallet(wallet.privateKey, provider);
+
+    const balance = await provider.getBalance(from);
+    const requiredAmount = ethers.parseEther(value);
+
+    if (balance < requiredAmount) {
+      throw new Error('Insufficient balance');
+    }
+
+    const tx = {
+      to: to,
+      value: requiredAmount
     };
 
-    const tx = await wallet.sendTransaction(transaction);
-    return tx.hash;
+    const txResponse = await ethWallet.sendTransaction(tx);
+    return txResponse.hash;
   }
 
   // 发送ERC20代币转账
-  async sendTokenTransaction(tokenAddress: string, to: string, amount: string, chainConfig: ChainConfig): Promise<string> {
+  async sendTokenTransaction(password: string, tokenAddress: string, to: string, amount: string, chainConfig: ChainConfig): Promise<string> {
     if (!this.currentAccount) {
       throw ethErrors.rpc.invalidParams('No account selected');
+    }
+    if (!password) {
+      throw new Error('Password not provided');
     }
 
     const provider = new ethers.JsonRpcProvider(chainConfig.rpcUrls[0], parseInt(chainConfig.chainId, 16));
@@ -311,9 +355,9 @@ export class WalletService {
   }
 
   // 从助记词创建HD钱包
-  async createMnemonicWallet(mnemonic: string, passphrase?: string, accountCount: number = 1): Promise<MnemonicWallet> {
-    if (!this.password) {
-      throw ethErrors.rpc.invalidParams('Password not set');
+  async createMnemonicWallet(password: string, mnemonic: string, passphrase?: string, accountCount: number = 1): Promise<MnemonicWallet> {
+    if (!password) {
+      throw ethErrors.rpc.invalidParams('Password not provided');
     }
 
     if (!this.validateMnemonic(mnemonic)) {
@@ -343,7 +387,7 @@ export class WalletService {
       };
       
       accounts.push(account);
-      await this.saveWallet(account);
+      await this.saveWallet(password, account);
     }
 
     const mnemonicWallet: MnemonicWallet = {
@@ -353,20 +397,20 @@ export class WalletService {
     };
 
     // 保存助记词钱包信息
-    await this.saveMnemonicWallet(mnemonicWallet);
+    await this.saveMnemonicWallet(password, mnemonicWallet);
 
     return mnemonicWallet;
   }
 
   // 从助记词导入钱包
-  async importMnemonicWallet(mnemonic: string, passphrase?: string, accountCount: number = 1): Promise<MnemonicWallet> {
-    return this.createMnemonicWallet(mnemonic, passphrase, accountCount);
+  async importMnemonicWallet(password: string, mnemonic: string, passphrase?: string, accountCount: number = 1): Promise<MnemonicWallet> {
+    return this.createMnemonicWallet(password, mnemonic, passphrase, accountCount);
   }
 
   // 从助记词派生新账户
-  async deriveAccountFromMnemonic(mnemonic: string, accountIndex: number, passphrase?: string): Promise<WalletAccount> {
-    if (!this.password) {
-      throw ethErrors.rpc.invalidParams('Password not set');
+  async deriveAccountFromMnemonic(password: string, mnemonic: string, accountIndex: number, passphrase?: string): Promise<WalletAccount> {
+    if (!password) {
+      throw ethErrors.rpc.invalidParams('Password not provided');
     }
 
     if (!this.validateMnemonic(mnemonic)) {
@@ -391,18 +435,18 @@ export class WalletService {
       derivationPath
     };
 
-    await this.saveWallet(account);
+    await this.saveWallet(password, account);
     return account;
   }
 
   // 保存助记词钱包
-  private async saveMnemonicWallet(mnemonicWallet: MnemonicWallet): Promise<void> {
+  private async saveMnemonicWallet(password: string, mnemonicWallet: MnemonicWallet): Promise<void> {
     const encryptedMnemonicWallets = await this.getStorage('encryptedMnemonicWallets');
     let mnemonicWallets: MnemonicWallet[] = [];
 
     if (encryptedMnemonicWallets) {
       try {
-        mnemonicWallets = await passworder.decrypt(this.password!, encryptedMnemonicWallets) as MnemonicWallet[];
+        mnemonicWallets = await passworder.decrypt(password, encryptedMnemonicWallets) as MnemonicWallet[];
       } catch {
         mnemonicWallets = [];
       }
@@ -416,21 +460,21 @@ export class WalletService {
       mnemonicWallets.push(mnemonicWallet);
     }
 
-    const encrypted = await passworder.encrypt(this.password!, mnemonicWallets);
+    const encrypted = await passworder.encrypt(password, mnemonicWallets);
     await this.setStorage('encryptedMnemonicWallets', encrypted);
   }
 
   // 获取助记词钱包
-  async getMnemonicWallets(): Promise<MnemonicWallet[]> {
-    if (!this.password) {
-      throw ethErrors.rpc.invalidParams('Password not set');
+  async getMnemonicWallets(password: string): Promise<MnemonicWallet[]> {
+    if (!password) {
+      throw ethErrors.rpc.invalidParams('Password not provided');
     }
 
     const encryptedMnemonicWallets = await this.getStorage('encryptedMnemonicWallets');
     if (!encryptedMnemonicWallets) return [];
 
     try {
-      return await passworder.decrypt(this.password, encryptedMnemonicWallets) as MnemonicWallet[];
+      return await passworder.decrypt(password, encryptedMnemonicWallets) as MnemonicWallet[];
     } catch {
       return [];
     }
