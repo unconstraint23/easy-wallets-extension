@@ -24,7 +24,7 @@ const AppRouter: React.FC = () => {
             <Route path="/transfer" element={<PrivateRoute><TransferPage /></PrivateRoute>} />
             <Route path="/add-token" element={<PrivateRoute><AddTokenPage /></PrivateRoute>} />
             <Route path="/account-detail" element={<PrivateRoute><AccountDetailPage /></PrivateRoute>} />
-            <Route path="*" element={<Navigate to="/wallet" />} />
+            <Route path="*" element={<Navigate to="/welcome" />} />
           </Routes>
         </Router>
       </WalletProvider>

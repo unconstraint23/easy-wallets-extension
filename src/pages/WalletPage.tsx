@@ -258,7 +258,7 @@ const WalletPage: React.FC = () => {
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="text-sm text-gray-300">0.00</p>
+                    <p className="text-sm text-gray-300">{token.balance}</p>
                     <p className="text-xs text-gray-500">{formatAddress(token.address)}</p>
                   </div>
                 </div>

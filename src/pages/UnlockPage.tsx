@@ -9,11 +9,7 @@ const UnlockPage: React.FC = ({ onSuccess }: any) => {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const { unlockWallet,isAuthenticated } = useAuth();
-  useEffect(() => {
-    if(isAuthenticated) {
-      onSuccess();
-    }   
-    }, []);
+  
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();

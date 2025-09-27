@@ -46,21 +46,21 @@ const CreateWalletPage: React.FC = () => {
 
       // 2. 根据不同的tab执行操作
       if (activeTab === 'create') {
-        await createWallet('主账户');
+        await createWallet('主账户', password);
       } else if (activeTab === 'mnemonic') {
         if (!mnemonic.trim()) {
           setError('助记词不能为空');
           setIsLoading(false);
           return;
         }
-        await importWalletFromMnemonic(mnemonic.trim(), '导入账户');
+        await importWalletFromMnemonic(mnemonic.trim(), '导入账户', password);
       } else if (activeTab === 'privateKey') {
         if (!privateKey.trim()) {
           setError('私钥不能为空');
           setIsLoading(false);
           return;
         }
-        await importWalletFromPrivateKey(privateKey.trim(), '导入账户');
+        await importWalletFromPrivateKey(privateKey.trim(), '导入账户', password);
       }
       
       // 3. 跳转到主页

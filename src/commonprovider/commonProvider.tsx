@@ -4,6 +4,7 @@ import { StorageManager, STORAGE_KEYS, DEFAULT_DATA, type TokenAsset } from "../
 import { walletService, type MnemonicWallet } from "../lib/wallet-service";
 import { useAuth } from "../auth/AuthContext";
 import { providerManager } from "../lib/provider";
+import { CryptoService } from "~src/lib/crypto-service";
 
 interface WalletAccount {
   address: string;
@@ -30,11 +31,11 @@ interface WalletContextType {
   currentChainId: string;
   watchedTokens: TokenAsset[];
   mnemonicWallets: MnemonicWallet[];
-  createWallet: (name?: string) => Promise<void>;
-  importWalletFromMnemonic: (mnemonic: string, name?: string) => Promise<void>;
-  importWalletFromPrivateKey: (privateKey: string, name?: string) => Promise<void>;
+  createWallet: (name?: string, passwordOverride?: string) => Promise<void>;
+  importWalletFromMnemonic: (mnemonic: string, name?: string, passwordOverride?: string) => Promise<void>;
+  importWalletFromPrivateKey: (privateKey: string, name?: string, passwordOverride?: string) => Promise<void>;
   generateMnemonic: () => string;
-  importMnemonicWallet: (mnemonic: string, passphrase?: string, name?: string) => Promise<void>;
+  importMnemonicWallet: (mnemonic: string, passphrase?: string, name?: string, passwordOverride?: string) => Promise<void>;
   selectAccount: (address: string) => void;
   selectChain: (chainId: string) => void;
   addWallet: (wallet: WalletAccount) => void;
@@ -62,7 +63,9 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   const storage = StorageManager.getInstance();
 
-  const checkAuth = () => {
+  // 用于所有钱包操作的密码优先级：参数 > context
+  const getPassword = (passwordOverride?: string) => {
+    if (passwordOverride) return CryptoService.encrypt(passwordOverride);
     if (!isAuthenticated || !password) {
       throw new Error("User is not authenticated");
     }
@@ -70,7 +73,7 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   }
 
   const refreshWallets = async () => {
-    const currentPassword = checkAuth();
+    const currentPassword = getPassword();
     const updatedWallets = await walletService.getWallets(currentPassword);
     setWallets(updatedWallets);
     return updatedWallets; // 返回更新后的钱包列表
@@ -98,6 +101,7 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         // 从加载后的钱包列表中恢复当前账户
         if (updatedWallets.length > 0) {
           const accountToSelect = updatedWallets.find(w => w.address === savedCurrentAccountAddress) || updatedWallets[0];
+          console.log("Restoring current account:", accountToSelect);
           setCurrentAccount(accountToSelect);
         } else {
           setCurrentAccount(null);
@@ -163,20 +167,20 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   }, [currentAccount, currentChainId, isLoaded, isAuthenticated]);
 
 
-  const createWallet = async (name?: string) => {
-    const currentPassword = checkAuth();
+  const createWallet = async (name?: string, passwordOverride?: string) => {
+    const currentPassword = getPassword(passwordOverride);
     await walletService.createWallet(currentPassword, name);
     await refreshWallets();
   };
 
-  const importWalletFromMnemonic = async (mnemonic: string, name?: string) => {
-    const currentPassword = checkAuth();
+  const importWalletFromMnemonic = async (mnemonic: string, name?: string, passwordOverride?: string) => {
+    const currentPassword = getPassword(passwordOverride);
     await walletService.importWalletFromMnemonic(currentPassword, mnemonic, name);
     await refreshWallets();
   };
 
-  const importWalletFromPrivateKey = async (privateKey: string, name?: string) => {
-    const currentPassword = checkAuth();
+  const importWalletFromPrivateKey = async (privateKey: string, name?: string, passwordOverride?: string) => {
+    const currentPassword = getPassword(passwordOverride);
     await walletService.importWalletFromPrivateKey(currentPassword, privateKey, name);
     await refreshWallets();
   };
@@ -187,10 +191,8 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   };
 
   // 导入助记词钱包
-  const importMnemonicWallet = async (mnemonic: string, passphrase?: string, name?: string) => {
-    const currentPassword = checkAuth();
-    // The service method expects accountCount as the third parameter, not name.
-    // We will call it with a default accountCount of 1.
+  const importMnemonicWallet = async (mnemonic: string, passphrase?: string, name?: string, passwordOverride?: string) => {
+    const currentPassword = getPassword(passwordOverride);
     await walletService.importMnemonicWallet(currentPassword, mnemonic, passphrase, 1);
     await refreshMnemonicWallets();
     await refreshWallets(); // 导入后也刷新普通钱包列表
@@ -198,7 +200,7 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   // 选择账户
   const selectAccount = async (address: string) => {
-    const currentPassword = checkAuth();
+    const currentPassword = getPassword();
     const account = await walletService.getWalletByAddress(currentPassword, address);
     if (account) {
       setCurrentAccount(account);
@@ -223,6 +225,7 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   // 添加监控的代币
   const addWatchedToken = async (token: Omit<TokenAsset, 'balance'>) => {
     const newTokens = [...watchedTokens, token as TokenAsset];
+    console.log("Add watched token:", newTokens);
     setWatchedTokens(newTokens);
     await storage.setItem(STORAGE_KEYS.WATCHED_TOKENS, newTokens);
     // 添加后立即刷新余额
@@ -238,7 +241,7 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   // 刷新监控代币的余额
   const refreshWatchedTokens = async () => {
-    const currentPassword = checkAuth();
+    const currentPassword = getPassword();
     if (!currentAccount || !currentChainId) {
       console.log("Cannot refresh token balances: no current account or chain.");
       return;
@@ -251,8 +254,10 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     }
 
     console.log("Refreshing watched tokens balances...");
+    let data = await storage.getItem<TokenAsset[]>(STORAGE_KEYS.WATCHED_TOKENS);
+    console.log(data, "watchedTokens");
     const updatedTokens = await Promise.all(
-      watchedTokens
+      data
         .filter(token => token.chainId === currentChainId) // 只刷新当前链的代币
         .map(async (token) => {
           try {
@@ -271,9 +276,9 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
           }
         })
     );
-
+    console.log("Updated tokens:", updatedTokens);
     // 合并刷新后的代币和未刷新的代币（其他链的）
-    const finalTokens = watchedTokens.map(
+    const finalTokens = data.map(
       (t) => updatedTokens.find((ut) => ut.address === t.address && ut.chainId === t.chainId) || t
     );
 
@@ -284,7 +289,7 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   // 刷新助记词钱包
   const refreshMnemonicWallets = async () => {
-    const currentPassword = checkAuth();
+    const currentPassword = getPassword();
     const mnemonics = await walletService.getMnemonicWallets(currentPassword);
     setMnemonicWallets(mnemonics);
   };

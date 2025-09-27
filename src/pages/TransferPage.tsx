@@ -1,6 +1,8 @@
 import React, { useState } from "react";
 import { walletService } from "../lib/wallet-service";
 import { useNavigate } from "react-router-dom";
+import { useWallet } from "../commonprovider/commonProvider";
+import { useAuth } from "../auth/AuthContext";
 
 const TransferPage = () => {
   const [to, setTo] = useState("");
@@ -8,7 +10,8 @@ const TransferPage = () => {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const navigate = useNavigate();
-
+  const { currentAccount,chains, currentChainId } = useWallet();
+  const { password } = useAuth();
   const handleTransfer = async () => {
     setError("");
     setSuccess("");
@@ -18,12 +21,14 @@ const TransferPage = () => {
     }
 
     try {
-      const activeAccount = await walletService.getCurrentAccount();
-      if (!activeAccount) {
+      
+      if (!currentAccount) {
         setError("没有可用的账户");
         return;
       }
-      const txHash = await walletService.sendEthTransaction(activeAccount.address, to, amount);
+      const chain = chains.find((c) => c.chainId === currentChainId) || chains[0]
+      console.log("chain",chain)
+      const txHash = await walletService.sendEthTransaction(chain, password, currentAccount.address, to, amount);
       setSuccess(`转账成功！交易哈希: ${txHash}`);
       setTo("");
       setAmount("");
@@ -45,7 +50,7 @@ const TransferPage = () => {
             id="to-address"
             value={to}
             onChange={(e) => setTo(e.target.value)}
-            className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+            className="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
             placeholder="0x..."
           />
         </div>
@@ -58,7 +63,7 @@ const TransferPage = () => {
             id="amount"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
-            className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+            className="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
             placeholder="0.1"
           />
         </div>

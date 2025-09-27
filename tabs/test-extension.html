@@ -490,20 +490,9 @@
     });
 }
 
-// 在页面加载完成后使用
-window.addEventListener('load', () => {
-    setTimeout(async () => {
-        try {
-            await waitForMyWallet();
+        waitForMyWallet();
             testConnection();
             showSystemInfo();
-        } catch (error) {
-            console.log('MyWallet detection failed:', error);
-            testConnection();
-            showSystemInfo();
-        }
-    }, 1000);
-});
 
     </script>
 </body>

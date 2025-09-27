@@ -3,9 +3,12 @@ import { StorageManager, STORAGE_KEYS } from '../lib/storage';
 import CreateWalletPage from '../pages/CreateWalletPage';
 import UnlockPage from '../pages/UnlockPage';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../auth/AuthContext';
+import WalletPage from './WalletPage';
 const WelcomePage: React.FC = () => {
   const [isFirstTime, setIsFirstTime] = useState<boolean | null>(null);
     const navigate = useNavigate();
+    const { isAuthenticated } = useAuth();
   useEffect(() => {
     const checkFirstTime = async () => {
       const storage = StorageManager.getInstance();
@@ -24,7 +27,7 @@ const WelcomePage: React.FC = () => {
     return <div>Loading...</div>;
   }
 
-  return isFirstTime ? <CreateWalletPage /> : <UnlockPage onSuccess={successCb} />;
+  return isFirstTime ? <CreateWalletPage /> : isAuthenticated ? <WalletPage /> : <UnlockPage onSuccess={successCb} />;
 };
 
 export default WelcomePage;

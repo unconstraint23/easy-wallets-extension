@@ -18,12 +18,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     checkAuth();
   }, []);
+  useEffect(() => {
+    getPassword();
+  }, []);
   const [password, setPassword] = useState<string|null>(null);
   
   const checkAuth = async () => {
     const auth = await storage.getItem('isAuthenticated') === 'true';
     setIsAuthenticated(auth);
   }
+
+  const getPassword = async () => {
+    setPassword(await storage.getItem<string>(STORAGE_KEYS.PASSWORD));
+    
+  }
+
   const login = async (password: string) => {
     
     const storedHash = await storage.getItem<string>(STORAGE_KEYS.PASSWORD);
@@ -36,12 +45,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         throw new Error('密码错误');
       }
     } else {
+      setPassword(hash);
       // 如果是首次登录，则设置密码
       await storage.setItem(STORAGE_KEYS.PASSWORD, hash);
     }
     
     setIsAuthenticated(true);
-    setPassword(password);
     await storage.setItem('isAuthenticated', 'true');
   };
 

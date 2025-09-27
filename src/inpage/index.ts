@@ -1,169 +1,141 @@
 (function() {
+  // A map to store resolve/reject functions for pending requests
+  const pendingRequests = new Map();
 
-  // 创建 ethereum 对象
+  // Function to generate a unique ID for each request
+  const generateId = () => `request-${Date.now()}-${Math.random()}`;
+
+  // --- Ethereum Provider ---
   const ethereum = {
     isMetaMask: false,
-    isMyWallet: true,
+    isMyWallet: true, // Deprecated, use isWalletExtension
+    isWalletExtension: true,
     isConnected: () => true,
-    request: async (request: any) => {
-      console.log('Ethereum request:', request);
 
-      // 通过 chrome.runtime.sendMessage 发送到 background script
+    request: (request) => {
       return new Promise((resolve, reject) => {
-        chrome.runtime.sendMessage(
-          { type: 'ETHEREUM_REQUEST', payload: request },
-          (response) => {
-            if (chrome.runtime.lastError) {
-              reject(new Error(chrome.runtime.lastError.message));
-              return;
-            }
-
-            if (response.error) {
-              reject(new Error(response.error.message));
-              return;
-            }
-
-            resolve(response.result);
-          }
-        );
+        const id = generateId();
+        pendingRequests.set(id, { resolve, reject });
+        window.postMessage({
+          type: 'ETHEREUM_REQUEST_FROM_PAGE',
+          id: id,
+          payload: request
+        }, '*');
       });
     },
 
-    // 事件监听器
-    on: (event: string, callback: Function) => {
-      console.log('Ethereum event listener added:', event);
-      // 这里可以添加事件监听逻辑
+    // Event listeners (simplified)
+    on: (event, listener) => {
+      window.addEventListener(`ethereum:${event}`, (e: CustomEvent) => listener(e.detail));
+    },
+    removeListener: (event, listener) => {
+      // Implementation for removeListener would require more complex tracking
+      console.log(`removeListener for ${event} called but not fully implemented.`);
     },
 
-    removeListener: (event: string, callback: Function) => {
-      console.log('Ethereum event listener removed:', event);
-    },
-
-    // 账户相关
+    // Properties that will be updated by messages from the content script
     selectedAddress: null,
-    chainId: `0x${Number(`${process.env.PLASMO_PUBLIC_ALCHEMY_MAINNET_CHAINID}`).toString(16)}`,
+    chainId: null,
+    networkVersion: null,
 
-    // 网络相关
-    networkVersion: '1',
-
-    // 其他常用方法
-    enable: async () => {
-      return await ethereum.request({ method: 'eth_requestAccounts' });
-    },
-
-    send: async (method: string, params?: any[]) => {
-      return await ethereum.request({ method, params });
-    },
-
-    sendAsync: async (request: any, callback: Function) => {
-      try {
-        const result = await ethereum.request(request);
-        callback(null, { result });
-      } catch (error) {
-        callback(error, null);
-      }
+    // Legacy methods
+    enable: () => ethereum.request({ method: 'eth_requestAccounts' }),
+    send: (method, params) => ethereum.request({ method, params }),
+    sendAsync: (request, callback) => {
+      ethereum.request(request)
+        .then(result => callback(null, { result }))
+        .catch(error => callback(error, null));
     }
   };
 
-// 创建 mywallet 对象
-  const mywallet = {
+  // --- WalletExtension Specific Object ---
+  const walletExtension = {
     ...ethereum,
     version: '1.0.0',
-    name: 'MyWallet',
+    name: 'WalletExtension',
 
-    // 自定义方法
-    generateMnemonic: async () => {
-      return await ethereum.request({ method: 'wallet_generateMnemonic' });
-    },
-
-    importMnemonic: async (mnemonic: string, passphrase?: string) => {
-      return await ethereum.request({
-        method: 'wallet_importMnemonic',
-        params: [mnemonic, passphrase]
-      });
-    },
-
-    getTokenBalance: async (tokenAddress: string, walletAddress?: string) => {
+    // Custom methods are now just wrappers around the standard request
+    generateMnemonic: () => ethereum.request({ method: 'wallet_generateMnemonic' }),
+    importMnemonic: (mnemonic, passphrase) => ethereum.request({
+      method: 'wallet_importMnemonic',
+      params: [mnemonic, passphrase]
+    }),
+    getTokenBalance: (tokenAddress, walletAddress) => {
       const address = walletAddress || ethereum.selectedAddress;
-      if (!address) {
-        throw new Error('No wallet address available');
-      }
-      return await ethereum.request({
+      if (!address) return Promise.reject(new Error('No wallet address available'));
+      return ethereum.request({
         method: 'eth_getTokenBalance',
         params: [address, tokenAddress]
       });
     },
-
-    watchAsset: async (type: string, options: any) => {
-      return await ethereum.request({
-        method: 'wallet_watchAsset',
-        params: [{ type, options }]
-      });
-    },
-
-    getWatchedTokens: async () => {
-      return await ethereum.request({ method: 'wallet_getWatchedTokens' });
-    },
-
-    sendEthTransaction: async (to: string, value: string) => {
-      return await ethereum.request({
-        method: 'wallet_sendEthTransaction',
-        params: [to, value]
-      });
-    },
-
-    sendTokenTransaction: async (tokenAddress: string, to: string, amount: string) => {
-      return await ethereum.request({
-        method: 'wallet_sendTokenTransaction',
-        params: [tokenAddress, to, amount]
-      });
-    }
+    watchAsset: (type, options) => ethereum.request({
+      method: 'wallet_watchAsset',
+      params: [{ type, options }]
+    }),
+    getWatchedTokens: () => ethereum.request({ method: 'wallet_getWatchedTokens' }),
+    sendEthTransaction: (to, value) => ethereum.request({
+      method: 'wallet_sendEthTransaction',
+      params: [to, value]
+    }),
+    sendTokenTransaction: (tokenAddress, to, amount) => ethereum.request({
+      method: 'wallet_sendTokenTransaction',
+      params: [tokenAddress, to, amount]
+    })
   };
 
-// 注入到页面
+  // --- Message Handling from Content Script ---
+  window.addEventListener('message', (event) => {
+    if (event.source !== window) return;
+
+    const { data } = event;
+
+    // Handle responses to requests
+    if (data.type === 'ETHEREUM_RESPONSE_FROM_EXTENSION' && data.id && pendingRequests.has(data.id)) {
+      const { resolve, reject } = pendingRequests.get(data.id);
+      const { response } = data;
+
+      if (response.error) {
+        reject(new Error(response.error.message));
+      } else {
+        resolve(response.result);
+      }
+      pendingRequests.delete(data.id);
+    }
+
+    // Handle pushed events from the background
+    if (data.type === 'ETHEREUM_ACCOUNT_CHANGED') {
+      ethereum.selectedAddress = data.address;
+      window.dispatchEvent(new CustomEvent('ethereum:accountsChanged', { detail: data.address ? [data.address] : [] }));
+    }
+
+    if (data.type === 'ETHEREUM_CHAIN_CHANGED') {
+      ethereum.chainId = data.chainId;
+      ethereum.networkVersion = parseInt(data.chainId, 16).toString();
+      window.dispatchEvent(new CustomEvent('ethereum:chainChanged', { detail: data.chainId }));
+    }
+  });
+
+  // --- Inject into Page ---
   if (typeof window !== 'undefined') {
     try {
-      // 检查是否已经存在 ethereum 对象
-      if (!window.ethereum) {
-        Object.defineProperty(window, 'ethereum', {
-          value: ethereum,
-          writable: false,
-          configurable: true
-        });
-        console.log('Ethereum object injected');
-      }
-
-      // 注入 mywallet 对象
-      Object.defineProperty(window, 'mywallet', {
-        value: mywallet,
+      // Use a more robust way to define properties
+      Object.defineProperty(window, 'ethereum', {
+        value: Object.freeze(ethereum),
         writable: false,
         configurable: true
       });
-      console.log("✅ MyWallet injected into page context");
+
+      Object.defineProperty(window, 'walletExtension', {
+        value: Object.freeze(walletExtension),
+        writable: false,
+        configurable: true
+      });
+
+      console.log("✅ WalletExtension provider injected into page context.");
+
     } catch (err) {
       console.error("Failed to inject wallet objects:", err);
     }
-
-    // 监听来自 background script 的消息
-    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-      if (message.type === 'ETHEREUM_ACCOUNT_CHANGED') {
-        ethereum.selectedAddress = message.address;
-        // 触发账户变化事件
-        window.dispatchEvent(new CustomEvent('ethereum#accountsChanged', {
-          detail: message.address ? [message.address] : []
-        }));
-      }
-
-      if (message.type === 'ETHEREUM_CHAIN_CHANGED') {
-        ethereum.chainId = message.chainId;
-        ethereum.networkVersion = parseInt(message.chainId, 16).toString();
-        // 触发链变化事件
-        window.dispatchEvent(new CustomEvent('ethereum#chainChanged', {
-          detail: message.chainId
-        }));
-      }
-
-      sendResponse({ success: true });
-    });
   }
-})()
+})();
+

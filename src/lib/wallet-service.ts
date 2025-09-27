@@ -3,6 +3,8 @@ import * as passworder from '@metamask/browser-passworder';
 import { ethErrors } from 'eth-rpc-errors';
 import * as bip39 from 'bip39';
 import { HDKey } from '@scure/bip32';
+import { providerManager } from './provider';
+
 
 export interface WalletAccount {
   address: string;
@@ -166,7 +168,9 @@ export class WalletService {
     if (!encryptedWallets) return [];
 
     try {
-      return await passworder.decrypt(password, encryptedWallets) as WalletAccount[];
+      let res = await passworder.decrypt(password, encryptedWallets) as WalletAccount[];
+      console.log('Decrypted wallets:', res);
+      return res;
     } catch (error) {
       console.error('Error decrypting wallets:', error);
       return [];
@@ -286,7 +290,7 @@ export class WalletService {
   }
 
   // 发送 ETH 交易
-  async sendEthTransaction(password: string, from: string, to: string, value: string): Promise<string> {
+  async sendEthTransaction(chainConfig: ChainConfig, password: string, from: string, to: string, value: string): Promise<string> {
     if (!password) {
       throw new Error('Password not provided');
     }
@@ -296,7 +300,7 @@ export class WalletService {
       throw new Error('Sender wallet not found');
     }
 
-    const provider = new ethers.JsonRpcProvider(this.getCurrentRpcUrl());
+    const provider =  providerManager.getProviderForChain(chainConfig);
     const ethWallet = new ethers.Wallet(wallet.privateKey, provider);
 
     const balance = await provider.getBalance(from);
@@ -474,7 +478,8 @@ export class WalletService {
     if (!encryptedMnemonicWallets) return [];
 
     try {
-      return await passworder.decrypt(password, encryptedMnemonicWallets) as MnemonicWallet[];
+      let res = await passworder.decrypt(password, encryptedMnemonicWallets) as MnemonicWallet[];
+      return res;
     } catch {
       return [];
     }
