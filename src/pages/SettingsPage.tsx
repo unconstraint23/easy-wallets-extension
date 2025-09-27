@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { Settings, ArrowLeft, Key, Network, Trash2, PlusCircle } from 'lucide-react';
-import { useWallet } from '../commonprovider/commonProvider';
+import { useWalletStore } from '../stores/walletStore';
 import { useNavigate } from 'react-router-dom';
 
 const SettingsPage: React.FC = () => {
   const navigate = useNavigate();
-  const { wallets, chains, currentChainId, setChains } = useWallet();
+  const { wallets, chains, currentChainId, setChains } = useWalletStore();
   const [showAddNetwork, setShowAddNetwork] = useState(false)
   const [form, setForm] = useState({
     chainId: '',
@@ -47,78 +47,179 @@ const SettingsPage: React.FC = () => {
         </div>
       </div>
 
-      {/* 设置内容 */}
-      <div className="flex-1 p-4 overflow-y-auto">
-        {/* 网络管理 */}
-        <div className="mb-6">
+      <div className="flex-1 overflow-y-auto p-4 space-y-6">
+        {/* 网络设置 */}
+        <div>
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-medium text-gray-400">网络管理</h2>
-            <button onClick={() => setShowAddNetwork(true)} className="flex items-center text-blue-400 hover:text-blue-300 text-sm">
-              <PlusCircle className="w-4 h-4 mr-1" /> 添加网络
+            <h2 className="text-sm font-medium text-gray-400">网络</h2>
+            <button 
+              onClick={() => setShowAddNetwork(true)}
+              className="text-blue-500 hover:text-blue-400"
+            >
+              <PlusCircle className="w-4 h-4" />
             </button>
           </div>
+          
           <div className="space-y-2">
             {chains.map((chain) => (
               <div 
                 key={chain.chainId} 
-                className={`bg-gray-800 rounded-lg p-3 ${
-                  currentChainId === chain.chainId ? 'ring-2 ring-blue-500' : ''
+                className={`p-3 rounded-lg ${
+                  chain.chainId === currentChainId 
+                    ? 'bg-blue-600' 
+                    : 'bg-gray-800 hover:bg-gray-700'
                 }`}
               >
-                <div className="flex items-center">
-                  <Network className="w-4 h-4 text-gray-400 mr-2" />
-                  <div>
-                    <p className="font-medium">{chain.chainName}</p>
-                    <p className="text-sm text-gray-400">{chain.chainId} · {chain.rpcUrls?.[0]}</p>
-                  </div>
+                <div className="flex items-center justify-between">
+                  <div className="font-medium">{chain.chainName}</div>
+                  {chain.chainId === currentChainId && (
+                    <div className="w-2 h-2 bg-white rounded-full"></div>
+                  )}
+                </div>
+                <div className="text-xs text-gray-300 mt-1">{chain.rpcUrls[0]}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* 钱包账户 */}
+        <div>
+          <h2 className="text-sm font-medium text-gray-400 mb-3">钱包账户</h2>
+          <div className="space-y-2">
+            {wallets.map((wallet) => (
+              <div key={wallet.address} className="p-3 bg-gray-800 rounded-lg">
+                <div className="font-medium">{wallet.name || '未命名钱包'}</div>
+                <div className="text-xs text-gray-400 font-mono mt-1">
+                  {wallet.address.substring(0, 6)}...{wallet.address.substring(wallet.address.length - 4)}
                 </div>
               </div>
             ))}
           </div>
         </div>
 
-        {/* 其他设置 */}
-        <div className="mb-6">
-          <h2 className="text-sm font-medium text-gray-400 mb-3">其他设置</h2>
-          <div className="space-y-2">
-            <div className="bg-gray-800 rounded-lg p-3">
-              <div className="flex items-center justify-between">
-                <span>导出钱包</span>
-                <button className="text-blue-400 hover:text-blue-300 text-sm">
-                  导出
-                </button>
-              </div>
+        {/* 操作选项 */}
+        <div className="space-y-3">
+          <button className="w-full flex items-center justify-between p-3 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors">
+            <div className="flex items-center">
+              <Key className="w-5 h-5 text-blue-500 mr-3" />
+              <span>更改密码</span>
             </div>
-            <div className="bg-gray-800 rounded-lg p-3">
-              <div className="flex items-center justify-between">
-                <span>重置钱包</span>
-                <button className="text-red-400 hover:text-red-300 text-sm">
-                  重置
-                </button>
-              </div>
+            <div className="text-gray-400">
+              <ArrowLeft className="w-4 h-4 rotate-180" />
             </div>
-          </div>
+          </button>
+          
+          <button className="w-full flex items-center justify-between p-3 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors">
+            <div className="flex items-center">
+              <Network className="w-5 h-5 text-green-500 mr-3" />
+              <span>网络设置</span>
+            </div>
+            <div className="text-gray-400">
+              <ArrowLeft className="w-4 h-4 rotate-180" />
+            </div>
+          </button>
+          
+          <button className="w-full flex items-center justify-between p-3 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors">
+            <div className="flex items-center">
+              <Trash2 className="w-5 h-5 text-red-500 mr-3" />
+              <span>清除数据</span>
+            </div>
+            <div className="text-gray-400">
+              <ArrowLeft className="w-4 h-4 rotate-180" />
+            </div>
+          </button>
         </div>
       </div>
 
+      {/* 添加网络模态框 */}
       {showAddNetwork && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-lg p-6 w-80">
-            <h3 className="text-lg font-bold mb-4">添加自定义网络</h3>
-            <div className="space-y-3">
-              <input className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md" placeholder="Chain ID (十进制或0x16进制)" value={form.chainId} onChange={(e)=>setForm({...form, chainId: e.target.value})} />
-              <input className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md" placeholder="网络名称" value={form.chainName} onChange={(e)=>setForm({...form, chainName: e.target.value})} />
-              <input className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md" placeholder="RPC URL" value={form.rpcUrl} onChange={(e)=>setForm({...form, rpcUrl: e.target.value})} />
-              <input className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md" placeholder="区块浏览器URL（可选）" value={form.blockExplorerUrl} onChange={(e)=>setForm({...form, blockExplorerUrl: e.target.value})} />
-              <div className="grid grid-cols-3 gap-2">
-                <input className="col-span-2 px-3 py-2 bg-gray-700 border border-gray-600 rounded-md" placeholder="币种名称" value={form.currencyName} onChange={(e)=>setForm({...form, currencyName: e.target.value})} />
-                <input className="px-3 py-2 bg-gray-700 border border-gray-600 rounded-md" placeholder="符号" value={form.currencySymbol} onChange={(e)=>setForm({...form, currencySymbol: e.target.value})} />
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md">
+            <h3 className="text-lg font-bold mb-4">添加网络</h3>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm text-gray-400 mb-2">网络名称</label>
+                <input
+                  type="text"
+                  value={form.chainName}
+                  onChange={(e) => setForm({...form, chainName: e.target.value})}
+                  className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="例如: Ethereum Mainnet"
+                />
               </div>
-              <input className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md" placeholder="精度（默认18）" type="number" value={form.decimals} onChange={(e)=>setForm({...form, decimals: parseInt(e.target.value || '18', 10)})} />
+              
+              <div>
+                <label className="block text-sm text-gray-400 mb-2">RPC URL</label>
+                <input
+                  type="text"
+                  value={form.rpcUrl}
+                  onChange={(e) => setForm({...form, rpcUrl: e.target.value})}
+                  className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="例如: https://mainnet.infura.io/v3/YOUR_PROJECT_ID"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm text-gray-400 mb-2">链 ID</label>
+                <input
+                  type="text"
+                  value={form.chainId}
+                  onChange={(e) => setForm({...form, chainId: e.target.value})}
+                  className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="例如: 1 或 0x1"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm text-gray-400 mb-2">区块链浏览器 URL (可选)</label>
+                <input
+                  type="text"
+                  value={form.blockExplorerUrl}
+                  onChange={(e) => setForm({...form, blockExplorerUrl: e.target.value})}
+                  className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="例如: https://etherscan.io"
+                />
+              </div>
+              
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm text-gray-400 mb-2">货币名称</label>
+                  <input
+                    type="text"
+                    value={form.currencyName}
+                    onChange={(e) => setForm({...form, currencyName: e.target.value})}
+                    className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="例如: Ether"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm text-gray-400 mb-2">货币符号</label>
+                  <input
+                    type="text"
+                    value={form.currencySymbol}
+                    onChange={(e) => setForm({...form, currencySymbol: e.target.value})}
+                    className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="例如: ETH"
+                  />
+                </div>
+              </div>
             </div>
-            <div className="flex space-x-3 mt-4">
-              <button onClick={()=>setShowAddNetwork(false)} className="flex-1 bg-gray-600 hover:bg-gray-700 text-white py-2 rounded-md">取消</button>
-              <button onClick={handleAddNetwork} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-md">保存</button>
+            
+            <div className="flex space-x-3 mt-6">
+              <button
+                onClick={() => setShowAddNetwork(false)}
+                className="flex-1 bg-gray-600 hover:bg-gray-700 text-white font-medium py-2 px-4 rounded-md transition-colors"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleAddNetwork}
+                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md transition-colors"
+              >
+                添加
+              </button>
             </div>
           </div>
         </div>

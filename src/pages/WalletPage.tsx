@@ -1,25 +1,27 @@
 import React, { useState, useEffect } from 'react';
 import { Wallet, Plus, Download, Settings, Key, Shield, ArrowLeft, Coins, Eye, EyeOff } from 'lucide-react';
-import { useWallet } from '../commonprovider/commonProvider';
 import { useNavigate } from 'react-router-dom';
+import { useWalletStore } from '../stores/walletStore';
+import { useAuthStore } from '../stores/authStore';
+import { walletService } from '../lib/wallet-service';
 
-const WalletPage: React.FC = () => {
+const WalletPage = () => {
   const navigate = useNavigate();
-  const { 
-    wallets, 
-    currentAccount, 
-    chains, 
+  const {
+    wallets,
+    currentAccount,
+    chains,
     currentChainId,
     watchedTokens,
     createWallet,
-    generateMnemonic,
-    importMnemonicWallet,
     importWalletFromPrivateKey,
     selectAccount,
     selectChain,
-    addWatchedToken,
-    refreshWatchedTokens
-  } = useWallet();
+    refreshWatchedTokens,
+    importMnemonicWallet
+  } = useWalletStore();
+  
+  const { password } = useAuthStore();
 
   const [showCreateWallet, setShowCreateWallet] = useState(false);
   const [showImportWallet, setShowImportWallet] = useState(false);
@@ -44,14 +46,18 @@ const WalletPage: React.FC = () => {
     }
   }, [wallets, currentAccount, selectAccount]);
 
-
+  useEffect(() => {
+    if (password) {
+      refreshWatchedTokens(password);
+    }
+  }, [password, refreshWatchedTokens]);
 
   const handleCreateWallet = async () => {
     try {
       if (newWalletName.trim()) {
-        await createWallet(newWalletName.trim());
+        await createWallet(password, newWalletName.trim());
       } else {
-        await createWallet();
+        await createWallet(password);
       }
       setShowCreateWallet(false);
       setNewWalletName('');
@@ -64,9 +70,9 @@ const WalletPage: React.FC = () => {
   const handleImportWallet = async () => {
     try {
       if (importPrivateKey && importWalletName.trim()) {
-        await importWalletFromPrivateKey(importPrivateKey, importWalletName.trim());
+        await importWalletFromPrivateKey(password, importPrivateKey, importWalletName.trim());
       } else if (importPrivateKey) {
-        await importWalletFromPrivateKey(importPrivateKey);
+        await importWalletFromPrivateKey(password, importPrivateKey);
       } else {
         alert('请输入私钥');
         return;
@@ -81,14 +87,15 @@ const WalletPage: React.FC = () => {
   };
 
   const handleGenerateMnemonic = () => {
-    const mnemonic = generateMnemonic();
+    const mnemonic = walletService.generateMnemonic();
     setGeneratedMnemonic(mnemonic);
     setShowMnemonicWallet(true);
   };
 
   const handleCreateMnemonicWallet = async () => {
     try {
-      await importMnemonicWallet(generatedMnemonic, '', mnemonicWalletName.trim() || undefined);
+      await importMnemonicWallet(password, generatedMnemonic, '', 1, mnemonicWalletName.trim() || undefined);
+      await refreshWatchedTokens(password);
       setShowMnemonicWallet(false);
       setGeneratedMnemonic('');
       setMnemonicWalletName('');
@@ -101,8 +108,10 @@ const WalletPage: React.FC = () => {
   const handleImportMnemonicWallet = async () => {
     try {
       await importMnemonicWallet(
+        password,
         importMnemonic, 
         mnemonicPassphrase || undefined, 
+        1,
         mnemonicWalletName.trim() || undefined
       );
       setShowImportMnemonic(false);
@@ -114,12 +123,9 @@ const WalletPage: React.FC = () => {
     }
   };
 
-  
-
   const formatAddress = (address: string) => {
     return `${address.slice(0, 6)}...${address.slice(-4)}`;
   };
-
 
   return (
     <div className="h-full flex flex-col bg-gray-900 text-white">
@@ -244,7 +250,9 @@ const WalletPage: React.FC = () => {
           </div>
 
           <div className="space-y-2">
-            {watchedTokens.map((token, index) => (
+            {watchedTokens
+              .filter(token => token.chainId === currentChainId)
+              .map((token, index) => (
               <div
                 key={`${token.address}-${index}`}
                 className="bg-gray-800 rounded-lg p-3"
@@ -258,14 +266,14 @@ const WalletPage: React.FC = () => {
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="text-sm text-gray-300">{token.balance}</p>
+                    <p className="text-sm text-gray-300">0.00</p>
                     <p className="text-xs text-gray-500">{formatAddress(token.address)}</p>
                   </div>
                 </div>
               </div>
             ))}
             
-            {watchedTokens.length === 0 && (
+            {watchedTokens.filter(token => token.chainId === currentChainId).length === 0 && (
               <div className="text-center py-8 text-gray-500">
                 <Coins className="w-8 h-8 mx-auto mb-2 opacity-50" />
                 <p className="text-sm">暂无代币</p>
@@ -465,8 +473,6 @@ const WalletPage: React.FC = () => {
           </div>
         </div>
       )}
-
-  
     </div>
   );
 };

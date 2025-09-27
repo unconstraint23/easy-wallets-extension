@@ -1,34 +1,12 @@
-import React, { useEffect, useMemo, useState } from "react"
-import { ArrowLeft, Wallet, Coins, Send } from "lucide-react"
-import { useWallet } from "../commonprovider/commonProvider"
-import { providerManager } from "../lib/provider"
-import { useNavigate } from "react-router-dom"
+import React from 'react';
+import { ArrowLeft } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { useWalletStore } from '../stores/walletStore';
 
-const AccountDetailPage: React.FC = () => {
+const AccountDetailPage = () => {
   const navigate = useNavigate();
-  const { currentAccount, currentChainId, chains } = useWallet()
-  const [balance, setBalance] = useState<string>("-")
-  const [loading, setLoading] = useState<boolean>(false)
-  const chain = useMemo(() => chains.find((c) => c.chainId === currentChainId) || chains[0], [chains, currentChainId])
-
-  useEffect(() => {
-    const fetchBalance = async () => {
-      if (!currentAccount || !chain) return
-      try {
-        setLoading(true)
-        console.log('fetch balance', currentAccount.address, chain.chainId)
-        const raw = await providerManager.getEthBalance(chain, currentAccount.address)
-        setBalance(providerManager.formatEther(raw))
-      } catch (e) {
-        console.error(e)
-        setBalance("-")
-      } finally {
-        setLoading(false)
-      }
-    }
-    fetchBalance()
-  }, [currentAccount?.address, chain?.chainId])
-
+  const { currentAccount, currentChainId, chains } = useWalletStore();
+  
   const formatAddress = (address: string) => `${address.slice(0, 6)}...${address.slice(-4)}`
 
   if (!currentAccount) {
@@ -65,32 +43,16 @@ const AccountDetailPage: React.FC = () => {
         </div>
 
         <div className="bg-gray-800 rounded-lg p-3">
-          <div className="text-sm text-gray-400 mb-1">网络</div>
-          <div>{chain?.chainName} ({chain?.chainId})</div>
+          <div className="text-sm text-gray-400 mb-1">名称</div>
+          <div>{currentAccount.name || '未命名'}</div>
         </div>
 
         <div className="bg-gray-800 rounded-lg p-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center">
-              <Coins className="w-4 h-4 text-yellow-400 mr-2" />
-              <div>
-                <div className="text-sm text-gray-400">ETH 余额</div>
-                <div className="text-lg font-semibold">{loading ? '查询中...' : `${balance} ${chain?.nativeCurrency?.symbol ?? 'ETH'}`}</div>
-              </div>
-            </div>
+          <div className="text-sm text-gray-400 mb-1">网络</div>
+          <div>
+            {chains.find(chain => chain.chainId === currentChainId)?.chainName || '未知网络'}
           </div>
         </div>
-      </div>
-
-      {/* 操作按钮 */}
-      <div className="p-4 mt-auto border-t border-gray-800">
-        <button
-          onClick={() => navigate('/transfer')}
-          className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-4 rounded-md transition duration-300 ease-in-out flex items-center justify-center"
-        >
-          <Send className="w-5 h-5 mr-2" />
-          转账
-        </button>
       </div>
     </div>
   )

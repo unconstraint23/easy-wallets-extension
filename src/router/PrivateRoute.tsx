@@ -1,16 +1,11 @@
 import React from 'react';
-import { Navigate, useLocation } from 'react-router-dom';
-import { useAuth } from '../auth/AuthContext';
+import { Navigate } from 'react-router-dom';
+import { useAuthStore } from '../stores/authStore';
 
 const PrivateRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { isAuthenticated } = useAuth();
-  const location = useLocation();
-
-  if (!isAuthenticated) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
-  }
-
-  return <>{children}</>;
+  const { isAuthenticated } = useAuthStore();
+  
+  return isAuthenticated ? <>{children}</> : <Navigate to="/welcome" />;
 };
 
 export default PrivateRoute;
