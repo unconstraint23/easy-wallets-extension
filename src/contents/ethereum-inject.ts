@@ -1,4 +1,5 @@
 import type { PlasmoCSConfig } from "plasmo"
+import inpageUrl from "url:../inpage/index.ts"
 
 export const config: PlasmoCSConfig = {
   matches: ["<all_urls>"],
@@ -6,34 +7,30 @@ export const config: PlasmoCSConfig = {
   all_frames: true
 }
 
-/**
- * Injects a script into the page's context.
- * @param filePath - The path to the script file, relative to the extension's root.
- */
-const injectScript = (filePath: string) => {
+
+const injectScript = (url: string) => {
   try {
     const container = document.head || document.documentElement;
     const script = document.createElement('script');
-    script.src = chrome.runtime.getURL(filePath);
+    script.src = url;
     script.async = false;
     container.insertBefore(script, container.firstChild);
     script.onload = () => {
-      console.log(`${filePath} injected and loaded.`);
+      console.log(`Script from ${url} injected and loaded.`);
       // The script can be removed after it has been executed.
-      if (script.parentNode) {
-        script.parentNode.removeChild(script);
-      }
+      // if (script.parentNode) {
+      //   script.parentNode.removeChild(script);
+      // }
     };
   } catch (error) {
-    console.error(`Wallet injection failed for ${filePath}:`, error);
+    console.error(`Wallet injection failed for ${url}:`, error);
   }
 };
 
 // Inject the inpage script
-injectScript('inpage.js');
+injectScript(inpageUrl);
 
-// Listen for messages from the page (sent by the inpage script)
-// and forward them to the background script.
+
 window.addEventListener('message', (event) => {
   if (event.source !== window || !event.data || event.data.type !== 'ETHEREUM_REQUEST_FROM_PAGE') {
     return;

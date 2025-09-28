@@ -7,6 +7,9 @@ import TransferPage from '../pages/TransferPage';
 import WelcomePage from '../pages/WelcomePage';
 import AddTokenPage from '../pages/AddTokenPage';
 import AccountDetailPage from '../pages/AccountDetailPage';
+import ConfirmConnectionPage from '../pages/ConfirmConnectionPage';
+import ConfirmSignaturePage from '../pages/ConfirmSignaturePage';
+import ConfirmTransactionPage from '../pages/ConfirmTransactionPage';
 import { AuthProvider } from '../auth/AuthContext';
 import PrivateRoute from './PrivateRoute';
 import { WalletProvider } from '../commonprovider/commonProvider';
@@ -24,6 +27,9 @@ const AppRouter: React.FC = () => {
             <Route path="/transfer" element={<PrivateRoute><TransferPage /></PrivateRoute>} />
             <Route path="/add-token" element={<PrivateRoute><AddTokenPage /></PrivateRoute>} />
             <Route path="/account-detail" element={<PrivateRoute><AccountDetailPage /></PrivateRoute>} />
+            <Route path="/confirm-connection" element={<ConfirmConnectionPage />} />
+            <Route path="/confirm-signature" element={<ConfirmSignaturePage />} />
+            <Route path="/confirm-transaction" element={<ConfirmTransactionPage />} />
             <Route path="*" element={<Navigate to="/welcome" />} />
           </Routes>
         </Router>

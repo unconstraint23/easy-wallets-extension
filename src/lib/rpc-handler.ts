@@ -29,6 +29,54 @@ export interface RPCRequestContext {
 }
 
 export class RPCHandler {
+  // A map to store resolve/reject functions for pending connection requests
+  private pendingConnectionRequests = new Map<string, { resolve: (value: boolean) => void, reject: (reason?: any) => void }>();
+
+  // A map to store resolve/reject functions for pending signature requests
+  private pendingSignatureRequests = new Map<string, { resolve: (value: boolean) => void, reject: (reason?: any) => void }>();
+
+  // A map to store resolve/reject functions for pending transaction requests
+  private pendingTransactionRequests = new Map<string, { resolve: (value: boolean) => void, reject: (reason?: any) => void }>();
+
+  // Public method to resolve pending connection requests from the background script
+  public resolveConnectionRequest(requestId: string, approved: boolean) {
+    const promise = this.pendingConnectionRequests.get(requestId);
+    if (promise) {
+      if (approved) {
+        promise.resolve(true);
+      } else {
+        promise.reject(ethErrors.provider.userRejectedRequest('User rejected the connection request.'));
+      }
+      this.pendingConnectionRequests.delete(requestId);
+    }
+  }
+
+  // Public method to resolve pending signature requests from the background script
+  public resolveSignatureRequest(requestId: string, approved: boolean) {
+    const promise = this.pendingSignatureRequests.get(requestId);
+    if (promise) {
+      if (approved) {
+        promise.resolve(true);
+      } else {
+        promise.reject(ethErrors.provider.userRejectedRequest('User rejected the signature request.'));
+      }
+      this.pendingSignatureRequests.delete(requestId);
+    }
+  }
+
+  // Public method to resolve pending transaction requests from the background script
+  public resolveTransactionRequest(requestId: string, approved: boolean) {
+    const promise = this.pendingTransactionRequests.get(requestId);
+    if (promise) {
+      if (approved) {
+        promise.resolve(true);
+      } else {
+        promise.reject(ethErrors.provider.userRejectedRequest('User rejected the transaction.'));
+      }
+      this.pendingTransactionRequests.delete(requestId);
+    }
+  }
+
   async handleRequest(request: RPCRequest, context?: RPCRequestContext): Promise<RPCResponse> {
     const { method, params = [], id, jsonrpc } = request;
 
@@ -57,11 +105,11 @@ export class RPCHandler {
           break;
 
         case 'eth_sendTransaction':
-          result = await this.handleEthSendTransaction(params);
+          result = await this.handleEthSendTransaction(params, context);
           break;
 
         case 'personal_sign':
-          result = await this.handlePersonalSign(params);
+          result = await this.handlePersonalSign(params, context);
           break;
 
         case 'eth_getBalance':
@@ -123,8 +171,8 @@ export class RPCHandler {
   }
 
   private async handleEthAccounts(): Promise<string[]> {
-    const address = walletService.getCurrentAddress();
-    return address ? [address] : [];
+    const wallets = await walletService.getWallets("ef797c8118f02dfb649607dd5d3f8c7623048c9c063d532cc95c5ed7a898a64f");
+    return wallets.map(wallet => wallet.address);
   }
 
   private async handleEthChainId(): Promise<string> {
@@ -149,7 +197,7 @@ export class RPCHandler {
   }
 
   private async handleEthRequestAccounts(context?: RPCRequestContext): Promise<string[]> {
-    const address = walletService.getCurrentAddress();
+    const address = "0xD877C8aAf9Aa37B8c4975f2ce6580d24461F83b2"
     if (!address) {
       throw ethErrors.rpc.invalidRequest('No accounts available');
     }
@@ -207,28 +255,28 @@ export class RPCHandler {
     await storage.setItem(STORAGE_KEYS.CONNECTION_PERMISSIONS, permissions);
   }
 
-  // 请求连接权限（这里应该显示UI让用户确认）
+  // 请求连接权限
   private async requestConnectionPermission(origin: string, accounts: string[]): Promise<boolean> {
-    // 在实际实现中，这里应该显示一个权限请求对话框
-    // 现在为了演示，我们假设用户总是同意
-    console.log(`Requesting permission for ${origin} to access accounts:`, accounts);
-    
-    // 发送消息到popup显示权限请求
-    try {
-      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (tabs[0]?.id) {
-        chrome.tabs.sendMessage(tabs[0].id, {
-          type: 'REQUEST_CONNECTION_PERMISSION',
-          origin,
-          accounts
-        });
-      }
-    } catch (error) {
-      console.error('Error sending permission request:', error);
-    }
-    
-    // 暂时返回true，在实际实现中应该等待用户响应
-    return true;
+    const requestId = `conn-${Date.now()}-${Math.random()}`;
+    const account = accounts[0]; // Assuming one account for now
+
+    const url = new URL(chrome.runtime.getURL('popup.html'));
+    url.hash = '/confirm-connection';
+    url.searchParams.set('origin', origin);
+    url.searchParams.set('account', account);
+    url.searchParams.set('requestId', requestId);
+
+    // Create a popup window for the user to confirm
+    await chrome.windows.create({
+      url: url.toString(),
+      type: 'popup',
+      width: 370,
+      height: 600,
+    });
+
+    return new Promise<boolean>((resolve, reject) => {
+      this.pendingConnectionRequests.set(requestId, { resolve, reject });
+    });
   }
 
   private async handleEthSign(params: any[]): Promise<string> {
@@ -246,29 +294,92 @@ export class RPCHandler {
     return await walletService.signMessage(message);
   }
 
-  private async handleEthSendTransaction(params: any[]): Promise<string> {
+  private async handleEthSendTransaction(params: any[], context?: RPCRequestContext): Promise<string> {
     if (!params || params.length === 0) {
       throw ethErrors.rpc.invalidParams('Missing transaction parameters');
     }
 
     const transaction = params[0];
-    
-    // 检查是否有to和value字段，如果有则执行实际转账
-    if (transaction.to && transaction.value !== undefined) {
-      const chains = await walletService.getChains();
-      const currentChainId = walletService.getCurrentChainId();
-      const currentChain = chains.find(chain => chain.chainId === currentChainId);
-      
-      if (!currentChain) {
-        throw new Error('Current chain not found');
-      }
 
-      const valueInEth = ethers.formatEther(transaction.value);
-      return await walletService.sendEthTransaction(transaction.to, valueInEth, currentChain);
+    // Normalize the transaction value. The standard is a hex string in wei.
+    // If we get a non-standard decimal string in ETH, we convert it to the standard.
+    if (transaction.value) {
+        try {
+            // Check if it's already a valid BigNumberish (hex, number, etc.)
+            ethers.toBigInt(transaction.value);
+        } catch (e) {
+            // If not, assume it's a decimal string in ETH and convert to hex wei
+            try {
+                transaction.value = ethers.parseEther(transaction.value.toString()).toHexString();
+            } catch (e2) {
+                throw ethErrors.rpc.invalidParams(`Invalid transaction value: ${transaction.value}`);
+            }
+        }
     }
 
-    // 否则只是签名交易
-    return await walletService.signTransaction(transaction);
+    // Ensure 'from' address matches the current account
+    const currentAddress = "0xD877C8aAf9Aa37B8c4975f2ce6580d24461F83b2"; // Using hardcoded from previous version
+    if (transaction.from.toLowerCase() !== currentAddress.toLowerCase()) {
+        throw ethErrors.rpc.invalidParams(`Transaction 'from' address ${transaction.from} does not match current account ${currentAddress}`);
+    }
+
+    // Request user confirmation for the transaction
+    const approved = await this.requestTransactionPermission(context.origin, transaction);
+
+    if (approved) {
+        // Logic from old implementation
+        if (transaction.to && transaction.value !== undefined) {
+            const chains = await walletService.getChains();
+            const currentChainId = walletService.getCurrentChainId();
+            const currentChain = {
+              chainId: `0x${Number(`${process.env.PLASMO_PUBLIC_SEPOLIA_CHAINID}`).toString(16)}`,
+              chainName: 'Sepolia Testnet',
+              rpcUrls: [`${process.env.PLASMO_PUBLIC_SEPOLIA_URL}`],
+              blockExplorerUrls: ['https://sepolia.etherscan.io'],
+              nativeCurrency: {
+                name: 'Sepolia Ether',
+                symbol: 'ETH',
+                decimals: 18,
+              },
+            }
+            
+            if (!currentChain) {
+                throw new Error('Current chain not found');
+            }
+
+            // The walletService.sendEthTransaction function seems to expect a decimal string in ETH.
+            // Since we normalized transaction.value to a hex string in wei, we can now safely format it.
+            const valueInEth = ethers.formatEther(transaction.value);
+            return await walletService.sendEthTransaction(transaction.to, valueInEth, currentChain);
+        }
+        // Fallback to just signing
+        return await walletService.signTransaction(transaction);
+    } else {
+      throw ethErrors.provider.userRejectedRequest('User rejected the transaction.');
+    }
+  }
+
+  private async requestTransactionPermission(origin: string, transaction: any): Promise<boolean> {
+    const requestId = `tx-${Date.now()}-${Math.random()}`;
+
+    const url = new URL(chrome.runtime.getURL('popup.html'));
+    url.hash = '/confirm-transaction';
+    url.searchParams.set('origin', origin);
+    // Serialize the transaction object and encode it
+    url.searchParams.set('tx', encodeURIComponent(JSON.stringify(transaction)));
+    url.searchParams.set('requestId', requestId);
+
+    // Create a popup window for the user to confirm
+    await chrome.windows.create({
+      url: url.toString(),
+      type: 'popup',
+      width: 370,
+      height: 600,
+    });
+
+    return new Promise<boolean>((resolve, reject) => {
+      this.pendingTransactionRequests.set(requestId, { resolve, reject });
+    });
   }
 
   // 发送ETH转账
@@ -279,8 +390,18 @@ export class RPCHandler {
 
     const [to, value] = params;
     const chains = await walletService.getChains();
-    const currentChainId = walletService.getCurrentChainId();
-    const currentChain = chains.find(chain => chain.chainId === currentChainId);
+    const currentChainId = "0x11155111"
+    const currentChain =  {
+      chainId: `0x${Number(`${process.env.PLASMO_PUBLIC_SEPOLIA_CHAINID}`).toString(16)}`,
+      chainName: 'Sepolia Testnet',
+      rpcUrls: [`${process.env.PLASMO_PUBLIC_SEPOLIA_URL}`],
+      blockExplorerUrls: ['https://sepolia.etherscan.io'],
+      nativeCurrency: {
+        name: 'Sepolia Ether',
+        symbol: 'ETH',
+        decimals: 18,
+      },
+    }
     
     if (!currentChain) {
       throw new Error('Current chain not found');
@@ -307,19 +428,50 @@ export class RPCHandler {
     return await walletService.sendTokenTransaction(tokenAddress, to, amount, currentChain);
   }
 
-  private async handlePersonalSign(params: any[]): Promise<string> {
+  private async handlePersonalSign(params: any[], context?: RPCRequestContext): Promise<string> {
     if (!params || params.length < 2) {
-      throw ethErrors.rpc.invalidParams('Missing parameters');
+      throw ethErrors.rpc.invalidParams('Expected at least 2 parameters for personal_sign: [message, address]');
     }
 
     const [message, address] = params;
-    const currentAddress = walletService.getCurrentAddress();
-    
-    if (address !== currentAddress) {
-      throw ethErrors.rpc.invalidParams('Address mismatch');
+
+    const currentAddress = "0xD877C8aAf9Aa37B8c4975f2ce6580d24461F83b2" // Using hardcoded from previous version
+    if (address.toLowerCase() !== currentAddress.toLowerCase()) {
+      throw ethErrors.rpc.invalidParams(`Requested signing address ${address} does not match current account ${currentAddress}`);
     }
 
-    return await walletService.signMessage(message);
+    // Request user confirmation for signing
+    const approved = await this.requestSignaturePermission(context.origin, address, message);
+
+    if (approved) {
+      return await walletService.signMessage(message);
+    } else {
+      // The rejection is handled by the promise, but this is a fallback.
+      throw ethErrors.provider.userRejectedRequest('User rejected the signature request.');
+    }
+  }
+
+  private async requestSignaturePermission(origin: string, account: string, message: string): Promise<boolean> {
+    const requestId = `sig-${Date.now()}-${Math.random()}`;
+
+    const url = new URL(chrome.runtime.getURL('popup.html'));
+    url.hash = '/confirm-signature';
+    url.searchParams.set('origin', origin);
+    url.searchParams.set('account', account);
+    url.searchParams.set('message', encodeURIComponent(message)); // Ensure message is URL-safe
+    url.searchParams.set('requestId', requestId);
+
+    // Create a popup window for the user to confirm
+    await chrome.windows.create({
+      url: url.toString(),
+      type: 'popup',
+      width: 370,
+      height: 600,
+    });
+
+    return new Promise<boolean>((resolve, reject) => {
+      this.pendingSignatureRequests.set(requestId, { resolve, reject });
+    });
   }
 
   private async handleEthGetBalance(params: any[]): Promise<string> {
@@ -328,11 +480,11 @@ export class RPCHandler {
     }
 
     const address = params[0];
-    const currentAddress = walletService.getCurrentAddress();
-    
-    if (address !== currentAddress) {
-      throw ethErrors.rpc.invalidParams('Address mismatch');
-    }
+    // const currentAddress = walletService.getCurrentAddress();
+    //
+    // if (address !== currentAddress) {
+    //   throw ethErrors.rpc.invalidParams('Address mismatch');
+    // }
 
     try {
       const chains = await walletService.getChains();
@@ -342,9 +494,19 @@ export class RPCHandler {
       if (!currentChain) {
         throw new Error('Current chain not found');
       }
-
-      const balance = await providerManager.getEthBalance(currentChain, address);
-      return '0x' + balance.toString(16);
+    const chain =  {
+        chainId: `0x${process.env.PLASMO_PUBLIC_SEPOLIA_CHAINID}`,
+        chainName: 'Sepolia Testnet',
+        rpcUrls: [`${process.env.PLASMO_PUBLIC_SEPOLIA_URL}`],
+        blockExplorerUrls: ['https://etherscan.io'],
+        nativeCurrency: {
+          name: 'Sepolia Ether',
+          symbol: 'ETH',
+          decimals: 18
+        }
+      }
+      const balance = await providerManager.getEthBalance(chain, address);
+      return balance.toString();
     } catch (error) {
       console.error('Error getting balance:', error);
       return '0x0';

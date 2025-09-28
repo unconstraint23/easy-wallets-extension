@@ -33,7 +33,7 @@ export interface ChainConfig {
 
 export class WalletService {
   private currentAccount: WalletAccount | null = null;
-  private currentChainId: string = '0x1'; // 默认以太坊主网
+  private currentChainId: string = '0x11155111';
 
   // Chrome storage 辅助方法
   private async getStorage(key: string): Promise<any> {
@@ -271,9 +271,9 @@ export class WalletService {
 
   // 签名消息
   async signMessage(message: string): Promise<string> {
-    if (!this.currentAccount) {
-      throw ethErrors.rpc.invalidParams('No account selected');
-    }
+    // if (!this.currentAccount) {
+    //   throw ethErrors.rpc.invalidParams('No account selected');
+    // }
 
     const wallet = new ethers.Wallet(this.currentAccount.privateKey);
     return await wallet.signMessage(message);

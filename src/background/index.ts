@@ -1,11 +1,29 @@
 import { rpcHandler } from '../lib/rpc-handler';
 import { walletService } from '../lib/wallet-service';
 
-// 监听来自 content script 的消息
+// 监听来自 content script 和其他地方的消息
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'ETHEREUM_REQUEST') {
     handleEthereumRequest(message.payload, sender, sendResponse);
-    return true; // 保持消息通道开放
+    return true; // 保持消息通道开放以进行异步响应
+  }
+  
+  if (message.type === 'CONNECTION_RESPONSE') {
+    const { requestId, approved } = message;
+    rpcHandler.resolveConnectionRequest(requestId, approved);
+    // 不需要 sendResponse，因为这是单向通知
+  }
+
+  if (message.type === 'SIGNATURE_RESPONSE') {
+    const { requestId, approved } = message;
+    rpcHandler.resolveSignatureRequest(requestId, approved);
+    // 不需要 sendResponse
+  }
+
+  if (message.type === 'TRANSACTION_RESPONSE') {
+    const { requestId, approved } = message;
+    rpcHandler.resolveTransactionRequest(requestId, approved);
+    // 不需要 sendResponse
   }
 });
 

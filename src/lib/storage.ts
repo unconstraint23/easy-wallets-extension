@@ -29,7 +29,7 @@ export const STORAGE_KEYS = {
   CHAINS: 'chains',
   CURRENT_CHAIN_ID: 'current_chain_id',
   WATCHED_TOKENS: 'watched_tokens',
-  CONNECTIONS: 'connections',
+  CONNECTION_PERMISSIONS: 'connection_permissions',
 } as const;
 
 // 存储工具类
